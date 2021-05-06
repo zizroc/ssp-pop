@@ -1,0 +1,154 @@
+---
+title: "Metabolic energy requirements based on SSPs"
+author: "Marcus J Thomson"
+date: "5/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+```
+
+## Introduction
+
+In this document, I compute the (healthy) energy requirement (in kcal/day) for the global population from the present to 2100 based on five shared socioeconomic pathways (SSPs). Assuming that level of education, as given in the SSP data, is a good proxy for level of activity required in a healthy diet (with the poorly educated being more likely to do manual labour and therefore requiring relatively greater dietary energy), I show that estimates based on uniformly "moderate" activity level under-estimates the necessary kcal quantity in the near term for all SSPs, and over-estimates it in the long term for SSP1, 2, and 4. For SSP3 and 5, the uniformly "moderate" assumption under-estimates over the entire time-series.
+
+## Load data
+
+### Population data
+
+Read in population data from the SSP database at IIASA. Reference: [Keywan Riahi, et al. (2017). The Shared Socioeconomic Pathways and their energy, land use, and greenhouse gas emissions implications: An overview, Global Environmental Change, Volume 42, Pages 153-168, ISSN 0959-3780, DOI:110.1016/j.gloenvcha.2016.05.009](https://secure.iiasa.ac.at/web-apps/ene/SspDb/dsd?Action=htmlpage&page=10)
+
+```{r cars}
+ssp_path <- "/home/thomson/Data/SSPs/"
+
+ssp_base <- read.csv(file = paste0(ssp_path, 
+                                   "SspDb_country_data_2013-06-12.csv"), 
+                     header = TRUE, 
+                     stringsAsFactors = FALSE)
+```
+
+## Total female and male numbers by age bracket
+
+At this stage, I am only interested in pulling the data for total female and male populations in each age bracket. Later, I include education level.
+
+```{r pressure, echo=FALSE}
+
+for(i in seq(0, 100, by = 5)){
+  tmp1 <- paste0("Population|Female|Aged", i, "-", i+4)
+  tmp2 <- paste0("Population|Male|Aged", i, "-", i+4)
+  
+  #unless age bracket is 100+
+  if(i==100){
+    tmp1 <- "Population|Female|Aged100+"
+    tmp2 <- "Population|Male|Aged100+"
+  }
+  
+  if(i==0){ 
+    female_pop <- tmp1
+    male_pop   <- tmp2
+  }
+  if(i >0){
+    female_pop <- c(female_pop, tmp1)
+    male_pop   <- c(male_pop, tmp2)
+  }
+}
+
+#map values of age class string onto numerical values of age brackets
+
+age_map <- rbind(tibble(VARIABLE = female_pop, 
+                        gender = "female", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                 tibble(VARIABLE = male_pop, 
+                        gender = "male", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)))
+
+ssp_world <- ssp_base %>% 
+  # filter(REGION == "USA") %>%  
+  filter(VARIABLE %in% female_pop | 
+         VARIABLE %in% male_pop) %>% 
+  left_join(., age_map, by = "VARIABLE") %>% 
+  # filter(SCENARIO == "SSP2_v9_130115") %>% 
+  arrange(min_age)
+
+ssp_world_long <- ssp_world %>% 
+  dplyr::select(-VARIABLE, -UNIT) %>% 
+  pivot_longer(cols = starts_with("X"), 
+               names_to = "year", 
+               names_prefix = "X", 
+               values_to = "millions") %>% 
+  mutate(year = as.numeric(year)) %>% 
+  na.omit()
+
+```
+
+### Plot the results
+
+```{r}
+
+ggplot(data = ssp_world_long %>% 
+         group_by(year, SCENARIO, gender) %>% 
+         summarize(pop_tot = sum(millions)), 
+       aes(x = year, y = pop_tot)) + 
+  geom_area(aes(fill = gender)) + 
+  # scale_colour_manual(
+  #   values = c("SSP1" = "SSP1_v9_130115", 
+  #              "SSP2" = "SSP2_v9_130115", 
+  #              "SSP3" = "SSP3_v9_130115", 
+  #              "SSP4" = "SSP4d_v9_130115", 
+  #              "SSP5" = "SSP5_v9_130115")
+  # ) + 
+  labs(
+    title = "World population by SSP", 
+    subtitle = "Data: IIASA SSP database", 
+    x = "Year", 
+    y = "Million persons"
+  ) + 
+  theme_minimal() + 
+  theme(
+    legend.position = "bottom"
+  ) + 
+  facet_wrap(~SCENARIO)
+
+# output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
+
+# if(!exists(ssp_world_long)) {
+#   save(ssp_world_long, file = paste0(output_path, "ssp_world_long.Rdata"))
+# }
+
+```
+
+
+```{r}
+
+output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
+
+if(!exists(ssp_world_long)) {
+  load(file = paste0(output_path, "ssp_world_long.Rdata"))
+}
+
+```
+
+## Daily energy requirements
+
+Read in the daily energy requirements for humans from the FAO: [Joint, F.A.O. (2004). Human energy requirements. Report of a Joint FAO/WHO/UNU Expert Consultation, Rome, 17-24 October 2001.](http://www.fao.org/3/y5686e/y5686e00.htm) 
+
+```{r, echo=FALSE}
+
+data_path <- "/home/thomson/Projects/iep_food/data/"
+
+der_child <- read.csv(paste0(data_path, 
+                             "FAO_Human_Daily_Energy_Children.csv"), 
+                      stringsAsFactors = FALSE)
+
+der_adult <- read.csv(paste0(data_path, 
+                             "FAO_Human_Daily_Energy_Adults.csv"), 
+                      stringsAsFactors = FALSE)
+
+```
+
