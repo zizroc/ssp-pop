@@ -93,16 +93,10 @@ ssp_world_long <- ssp_world %>%
 
 ggplot(data = ssp_world_long %>% 
          group_by(year, SCENARIO, gender) %>% 
-         summarize(pop_tot = sum(millions)), 
+         summarize(pop_tot = sum(millions), .groups = "drop"), 
        aes(x = year, y = pop_tot)) + 
-  geom_area(aes(fill = gender)) + 
-  # scale_colour_manual(
-  #   values = c("SSP1" = "SSP1_v9_130115", 
-  #              "SSP2" = "SSP2_v9_130115", 
-  #              "SSP3" = "SSP3_v9_130115", 
-  #              "SSP4" = "SSP4d_v9_130115", 
-  #              "SSP5" = "SSP5_v9_130115")
-  # ) + 
+  geom_area(aes(fill = gender), 
+            alpha = 0.7) + 
   labs(
     title = "World population by SSP", 
     subtitle = "Data: IIASA SSP database", 
@@ -111,9 +105,17 @@ ggplot(data = ssp_world_long %>%
   ) + 
   theme_minimal() + 
   theme(
-    legend.position = "bottom"
+    legend.position = "top", 
+    axis.text.x = element_text(angle = 90)
   ) + 
-  facet_wrap(~SCENARIO)
+  facet_wrap(~SCENARIO, 
+             nrow = 1, 
+             labeller = as_labeller(
+               c("SSP1_v9_130115" = "SSP1", 
+                 "SSP2_v9_130115" = "SSP2",
+                 "SSP3_v9_130115" = "SSP3",
+                 "SSP4d_v9_130115"= "SSP4",
+                 "SSP5_v9_130115" = "SSP5")))
 
 # output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
 
@@ -136,7 +138,7 @@ if(!exists(ssp_world_long)) {
 
 ## Daily energy requirements
 
-Read in the daily energy requirements for humans from the FAO: [Joint, F.A.O. (2004). Human energy requirements. Report of a Joint FAO/WHO/UNU Expert Consultation, Rome, 17-24 October 2001.](http://www.fao.org/3/y5686e/y5686e00.htm) 
+Read in the daily energy requirements for humans from the FAO: [Joint, F.A.O. (2004). Human energy requirements. Report of a Joint FAO/WHO/UNU Expert Consultation, Rome, 17-24 October 2001.](http://www.fao.org/3/y5686e/y5686e00.htm).
 
 ```{r, echo=FALSE}
 
@@ -151,4 +153,948 @@ der_adult <- read.csv(paste0(data_path,
                       stringsAsFactors = FALSE)
 
 ```
+
+These data contain daily energy requirements (MJ/day and kcal/day) for children (ages ) and adults (ages ) by age range, gender, body mass, and activity level. For adults, there are: three age ranges (i.e., 18-29.9, 30-59.9, and 60 plus years); ten different body mass groups (i.e., 45 to 90 kg in 5 kg increments); and six different activity levels (i.e., 1.45, 1.60, 1.75, 1.90, 2.05, and 2.20 times BMR). For children, there are: seventeen age ranges (i.e., 1-2 to 17-18 by yearly increments); three activity level groups (i.e., "light", "moderate", and "heavy"); and thirty-four body mass groups (i.e., 17 for females from 10.8 to 56.7 kg, and 17 for males from 11.5 to 67.8 kg).
+
+Before joining to the SSP data, the DER data will need to be aggregated: the `der_child` data set will be expanded to generate rows for each distinct age, gender, and activity level group; and the expanded `der_child` and `der_adult` data sets will need to be harmonized.
+
+NB: I use `drop_na` here because light and heavy kcal values are not given for children under 6 yrs old. In such a case, moderate values are passed.
+
+```{r}
+
+av_der_child <- der_child %>% 
+  tidyr::drop_na() %>% 
+  dplyr::select(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Body_mass_kg, 
+    Activity_level, 
+    Daily_energy_req_kilocal_per_day) %>% 
+  dplyr::group_by(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Activity_level) %>% 
+  dplyr::summarise(
+    av_body_mass = mean(Body_mass_kg, 
+                        na.rm = TRUE), 
+    av_kcalPerDay = mean(Daily_energy_req_kilocal_per_day, 
+                         na.rm = TRUE), 
+    .groups = "drop") %>% 
+  dplyr::ungroup()
+
+av_der_child
+
+```
+
+Aggregate `der_adult` into three activity level categories, with 1.45 and 1.60 times BMR coded as "light", 1.75 and 1.90 times as "moderate", and 2.05 and 2.20 times as "heavy"; and average DER by age, gender and activity level groups.
+
+```{r}
+
+av_der_adult <- der_adult %>% 
+  dplyr::select(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Body_mass_kg, 
+    Activity_level, 
+    Daily_energy_req_kilocal_per_day) %>%  
+  dplyr::group_by(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Activity_level) %>% 
+  dplyr::summarise(
+    av_body_mass = mean(Body_mass_kg, 
+                        na.rm = TRUE), 
+    av_kcalPerDay = mean(Daily_energy_req_kilocal_per_day, 
+                         na.rm = TRUE), 
+    .groups = "drop") %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(
+    Activity_level = ifelse(Activity_level %in% c("1.45 × BMR", "1.60 × BMR"),  
+                                 "light", 
+                                 ifelse(Activity_level %in% c("1.75 × BMR", "1.90 × BMR"), 
+                                        "moderate", 
+                                        ifelse(Activity_level %in% c("2.05 × BMR", "2.20 × BMR"), 
+                                               "heavy", 
+                                               NA))))
+
+
+head(av_der_adult)
+
+```
+
+Make a data frame with a row for each distinct year, gender, activity level group, then bin these into Age_min and Age_max columns as are used in the `av_der_child` and `av_der_adult` data sets. 
+
+```{r}
+
+expanded_ages <- rbind(
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("female", 618), 
+    Activity_level = "light"), 
+  data.frame(min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("female", 618), 
+    Activity_level = "moderate"), 
+    data.frame(min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("female", 618), 
+    Activity_level = "heavy"), 
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("male", 618), 
+    Activity_level = "light"), 
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("male", 618), 
+    Activity_level = "moderate"), 
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("male", 618), 
+    Activity_level = "heavy")) %>% 
+  mutate(Age_min = ifelse(min_age %in% c(1:17), 
+                          min_age, 
+                          ifelse(min_age %in% c(18:29), 
+                                 18, 
+                                 ifelse(min_age %in% c(30:59), 
+                                        30, 
+                                        ifelse(min_age >= 60, 
+                                               60, 
+                                               NA)))), 
+         Age_max = if_else(max_age %in% c(2:18), 
+                           max_age, 
+                           ifelse(max_age %in% c(19:30), 
+                                  30, 
+                                  ifelse(max_age %in% c(31:60), 
+                                         60, 
+                                         ifelse(max_age >= 61, 
+                                                999, 
+                                                NA)))))
+
+expanded_ages$Gender <- as.character(expanded_ages$Gender)
+expanded_ages$Activity_level <- as.character(expanded_ages$Activity_level)
+
+head(expanded_ages)
+
+```
+
+Join the expanded child and adult data sets.
+
+```{r}
+
+av_der <- av_der_child %>% 
+  dplyr::full_join(
+    av_der_adult, 
+    by = c("Age_min", "Age_max", "Gender", "Activity_level", "av_body_mass", "av_kcalPerDay")) %>% 
+  dplyr::arrange(Age_min)
+
+head(av_der)
+
+```
+
+The harmonized DER data set also contains an 'age' column, the midpoint of each age range value. NB: Children under the age of 5 years are classified as having "moderate" activity levels exclusive of "light" or "heavy" activity levels.
+
+```{r}
+
+der <- av_der %>% 
+  dplyr::full_join(
+    expanded_ages, 
+    by = c("Age_min", "Age_max", "Gender", "Activity_level")) %>% 
+  dplyr::group_by(min_age, max_age, Gender, Activity_level) %>% 
+  dplyr::summarise(
+    av_kcalPerDay = mean(av_kcalPerDay, 
+                         na.rm = TRUE), 
+    av_body_mass = mean(av_body_mass, 
+                        na.rm = TRUE), 
+    .groups = "drop") %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(age = 0.5*(min_age + max_age))
+
+head(der)
+
+```
+
+Plot the data.
+
+```{r}
+
+p1 <- ggplot(data = der, aes(x = age, y = av_kcalPerDay)) + 
+  geom_point(aes(colour = Activity_level, 
+                shape = Gender)) + 
+  geom_smooth(aes(colour = Activity_level, 
+                linetype = Gender), 
+              method = "loess", 
+              span = 0.1) + 
+  scale_color_manual(values = c("light" = "green", 
+                                "moderate" = "blue", 
+                                "heavy" = "red")) + 
+  scale_shape_manual(values = c("male" = 2, "female" = 3)) + 
+  scale_linetype_manual(values = c("male" = "dashed", "female" = "solid")) + 
+  labs(
+    x = "Age (yrs)", 
+    y = "kcal/cap/day", 
+    colour = "Activity \nLevel"
+  ) + 
+  theme_minimal()
+
+p1
+
+```
+
+There is a discontinuity in the DER between ages 18 and 19, probably because of the age-bracket averaging (18-30 years) for in the `der_adult` data set. Therefore, I use the values from the LOESS models (lines on the plot) as a "smoothed" version of the DER values from the harmonized data set.
+
+```{r}
+
+fit_data <- ggplot_build(p1)$data[[2]]
+
+extracted_fit_data <- fit_data %>% 
+  mutate(gender = ifelse(linetype == "solid", 
+                         "female", 
+                         "male"), 
+         activity_level = ifelse(colour == "red", 
+                                 "heavy", 
+                                 ifelse(colour == "blue", 
+                                        "moderate", 
+                                        "light"))) %>% 
+  rename("age" = x, "kcal_perDay" = y) %>% 
+  select(gender, activity_level, age, kcal_perDay)
+
+# head(extracted_fit_data)
+
+ggplot(extracted_fit_data, aes(x = age, y = kcal_perDay)) + 
+  geom_line(aes(colour = activity_level, linetype = gender))
+
+```
+Bin the ages in the 'age' column by whole numbers and interpolate any empty DER values.
+
+```{r}
+
+tmp <- rbind(data.frame(gender = "female", 
+                  activity_level = "light", 
+                  age = seq(1:104)), 
+             data.frame(gender = "female", 
+                  activity_level = "moderate", 
+                  age = seq(1:104)), 
+             data.frame(gender = "female", 
+                  activity_level = "heavy", 
+                  age = seq(1:104)), 
+             data.frame(gender = "male", 
+                  activity_level = "light", 
+                  age = seq(1:104)), 
+             data.frame(gender = "male", 
+                  activity_level = "moderate", 
+                  age = seq(1:104)), 
+             data.frame(gender = "male", 
+                  activity_level = "heavy", 
+                  age = seq(1:104)))
+
+tmp$gender <- as.character(tmp$gender)
+tmp$activity_level <- as.character(tmp$activity_level)
+
+clean_fit_data <- extracted_fit_data %>% 
+  dplyr::mutate(age = round(age)) %>% 
+  dplyr::full_join(tmp, 
+                   by = c("gender", "activity_level", "age")) %>% 
+  dplyr::arrange(age)
+
+clean_fit_data
+
+```
+
+```{r}
+
+interp_fit_data <- clean_fit_data %>% 
+  group_by(gender, activity_level) %>% 
+  arrange(age) %>% 
+  mutate(kcal_interp = zoo::na.approx(kcal_perDay, maxgap = 5, rule = 3)) %>% 
+  ungroup()
+
+interp_fit_data
+
+```
+
+```{r}
+
+ggplot(interp_fit_data, aes(x = age, y = kcal_interp)) + 
+  geom_line(aes(colour = activity_level, linetype = gender))
+
+```
+
+Now bin DER by the same age brackets as the population data.
+
+```{r}
+fit_data_final <- interp_fit_data %>% 
+  group_by(gender, activity_level) %>% 
+  mutate(min_age = ifelse(
+    age < 5, 
+    0, 
+    ifelse(
+      age >= 5 & age < 10, 
+      5, 
+      ifelse(
+        age >= 10 & age < 15, 
+        10, 
+        ifelse(
+          age >= 15 & age < 20, 
+          15, 
+          ifelse(
+            age >= 20 & age < 25, 
+            20, 
+            ifelse(
+              age >= 25 & age < 30, 
+              25, 
+              ifelse(
+                age >= 30 & age < 35, 
+                30, 
+                ifelse(
+                  age >= 35 & age < 40, 
+                  35, 
+                  ifelse(
+                    age >= 40 & age < 45, 
+                    40, 
+                    ifelse(
+                      age >= 45 & age < 50, 
+                      45, 
+                      ifelse(
+                        age >= 50 & age < 55, 
+                        50, 
+                        ifelse(
+                          age >= 55 & age < 60, 
+                          55, 
+                          ifelse(
+                            age >= 60 & age < 65, 
+                            60, 
+                            ifelse(
+                              age >= 65 & age < 70, 
+                              65, 
+                              ifelse(
+                                age >= 70 & age < 75, 
+                                70, 
+                                ifelse(
+                                  age >= 75 & age < 80, 
+                                  75, 
+                                  ifelse(
+                                    age >= 80 & age < 85, 
+                                    80, 
+                                    ifelse(
+                                      age >= 85 & age < 90, 
+                                      85, 
+                                      ifelse(
+                                        age >= 90 & age < 95, 
+                                        90, 
+                                        ifelse(
+                                          age >= 95 & age < 100, 
+                                          95, 
+                                          100)))))))))))))))))))), 
+    max_age = ifelse(
+      age < 5, 
+      4, 
+      ifelse(
+        age >= 5 & age < 10, 
+        9, 
+        ifelse(
+          age >= 10 & age < 15, 
+          14, 
+          ifelse(
+            age >= 15 & age < 20, 
+            19, 
+            ifelse(
+              age >= 20 & age < 25, 
+              24, 
+              ifelse(
+                age >= 25 & age < 30, 
+                29, 
+                ifelse(
+                  age >= 30 & age < 35, 
+                  34, 
+                  ifelse(
+                    age >= 35 & age < 40, 
+                    39, 
+                    ifelse(
+                      age >= 40 & age < 45, 
+                      44, 
+                      ifelse(
+                        age >= 45 & age < 50, 
+                        49, 
+                        ifelse(
+                          age >= 50 & age < 55, 
+                          54, 
+                          ifelse(
+                            age >= 55 & age < 60, 
+                            59, 
+                            ifelse(
+                              age >= 60 & age < 65, 
+                              64, 
+                              ifelse(
+                                age >= 65 & age < 70, 
+                                69, 
+                                ifelse(
+                                  age >= 70 & age < 75, 
+                                  74, 
+                                  ifelse(
+                                    age >= 75 & age < 80, 
+                                    79, 
+                                    ifelse(
+                                      age >= 80 & age < 85, 
+                                      84, 
+                                      ifelse(
+                                        age >= 85 & age < 90, 
+                                        89, 
+                                        ifelse(
+                                          age >= 90 & age < 95, 
+                                          94, 
+                                          ifelse(
+                                            age >= 95 & age < 100, 
+                                            99, 
+                                            104))))))))))))))))))))) %>% 
+  ungroup() %>% 
+  group_by(gender, activity_level, min_age, max_age) %>% 
+  summarise(kcal_mean = mean(kcal_interp), 
+            .groups = "drop")
+
+head(fit_data_final)
+```
+
+Join the mean-AMDR and metabolic requirements data frames.
+
+```{r}
+
+ssp_kcal <- ssp_world_long %>% 
+  full_join(fit_data_final, 
+            by = c("gender", "min_age", "max_age")) %>% 
+  mutate(million_kcal_perDay = millions*kcal_mean)
+
+head(ssp_kcal)
+
+
+```
+
+Sum daily metabolic requirements for all countries to give an estimate of the total metabolic energy demand for the world population under the different SSP scenarios, without reference to education or activity level. (Here, activity level is filtered to be the moderate case, and of course the only model is the 'IIASA-WiC POP' one.)
+
+```{r}
+
+sum_ssp_kcal <- ssp_kcal %>% 
+  dplyr::filter(MODEL == "IIASA-WiC POP" & activity_level == "moderate") %>% 
+  dplyr::group_by(SCENARIO, year) %>% 
+  dplyr::summarise(total_kcal_perDay = sum(million_kcal_perDay), 
+            .groups = "drop") %>% 
+  dplyr::ungroup()
+
+head(sum_ssp_kcal)
+
+```
+
+
+```{r}
+library(scales)
+p2 <- ggplot(sum_ssp_kcal, 
+             aes(x = year, y = total_kcal_perDay)) + 
+  geom_line(aes(colour = SCENARIO), 
+            size = 1.2, 
+            alpha = 0.8) + 
+  labs(
+    title = "Daily human metabolic energy demand, with projection 2010-2100", 
+    subtitle = "Data: IIASA & FAO", 
+    x = "Year", 
+    y = "M kcal per day", 
+    colour = "Scenario"
+  ) + 
+  scale_color_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  scale_y_continuous(labels = scientific) + 
+  theme_minimal()
+
+p2
+
+```
+
+## Considering disaggregated education and activity levels
+
+The above analysis simplified food demand in two ways: it aggregated populations globally, and it assumed a moderate activity level the daily (healthy) caloric requirement. The SSPs give more detailed assumptions on national education levels by gender and age cohort, and the FAO healthy diet data give detailed information about metabolic energy requirements by age and gender that we aggregated into the three activity levels.
+
+The SSPs contain four education levels (i.e., "no education", "primary education", "secondary education", and "tertiary education"). I assume that individuals with primary level and below will tend to be employed in manual physical labor, secondary level will be employed in trades, and tertiary level will be white collar; hence, I map these onto "heavy", "moderate", and "light" activity levels, respectively.
+
+I made several vectors of character strings:
+
+```{r}
+
+for(i in seq(0, 100, by = 5)){
+  tmp1 <- paste0("Population|Female|Aged", i, "-", i+4, "|No Education")
+  tmp2 <- paste0("Population|Male|Aged", i, "-", i+4, "|No Education")
+  
+  tmp3 <- paste0("Population|Female|Aged", i, "-", i+4, "|Primary Education")
+  tmp4 <- paste0("Population|Male|Aged", i, "-", i+4, "|Primary Education")
+  
+  tmp5 <- paste0("Population|Female|Aged", i, "-", i+4, "|Secondary Education")
+  tmp6 <- paste0("Population|Male|Aged", i, "-", i+4, "|Secondary Education")
+  
+  tmp7 <- paste0("Population|Female|Aged", i, "-", i+4, "|Tertiary Education")
+  tmp8 <- paste0("Population|Male|Aged", i, "-", i+4, "|Tertiary Education")
+  
+  #unless age bracket is 100+
+  if(i==100){
+    tmp1 <- "Population|Female|Aged100+|No Education"
+    tmp2 <- "Population|Male|Aged100+|No Education"
+    
+    tmp3 <- "Population|Female|Aged100+|Primary Education"
+    tmp4 <- "Population|Male|Aged100+|Primary Education"
+    
+    tmp5 <- "Population|Female|Aged100+|Secondary Education"
+    tmp6 <- "Population|Male|Aged100+|Secondary Education"
+    
+    tmp7 <- "Population|Female|Aged100+|Tertiary Education"
+    tmp8 <- "Population|Male|Aged100+|Tertiary Education"
+  }
+  
+  if(i==0){ 
+    female_pop_noEd <- tmp1
+    male_pop_noEd   <- tmp2
+    
+    female_pop_primEd <- tmp3
+    male_pop_primEd   <- tmp4
+    
+    female_pop_secondEd <- tmp5
+    male_pop_secondEd   <- tmp6
+    
+    female_pop_tertiEd <- tmp7
+    male_pop_tertiEd   <- tmp8
+  }
+  if(i >0){
+    female_pop_noEd <- c(female_pop_noEd, tmp1)
+    male_pop_noEd   <- c(male_pop_noEd, tmp2)
+    
+    female_pop_primEd <- c(female_pop_primEd, tmp3)
+    male_pop_primEd   <- c(male_pop_primEd, tmp4)
+    
+    female_pop_secondEd <- c(female_pop_secondEd, tmp5)
+    male_pop_secondEd   <- c(male_pop_secondEd, tmp6)
+    
+    female_pop_tertiEd <- c(female_pop_tertiEd, tmp7)
+    male_pop_tertiEd   <- c(male_pop_tertiEd, tmp8)
+  }
+}
+
+```
+
+I turn these into a data frame (`age_edu_map`) that maps the 'VARIABLE' column from the SSP data to disaggregated 'gender', 'education_level', 'min_age' and 'max_age' columns, and adds an 'activity_level' column.
+
+```{r}
+
+age_edu_map <- rbind(tibble(VARIABLE = female_pop_noEd, 
+                        gender = "female", 
+                        education_level = "none", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_noEd, 
+                        gender = "male", 
+                        education_level = "none", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = female_pop_primEd, 
+                        gender = "female", 
+                        education_level = "primary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_primEd, 
+                        gender = "male", 
+                        education_level = "primary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = female_pop_secondEd, 
+                        gender = "female", 
+                        education_level = "secondary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_secondEd, 
+                        gender = "male", 
+                        education_level = "secondary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = female_pop_tertiEd, 
+                        gender = "female", 
+                        education_level = "tertiary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_tertiEd, 
+                        gender = "male", 
+                        education_level = "tertiary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)))
+
+age_edu_map <- age_edu_map %>% 
+  dplyr::mutate(activity_level = ifelse(
+    education_level %in% c("none", "primary"), 
+    "heavy", 
+    ifelse(
+      education_level == "secondary", 
+      "moderate", 
+      "light")))
+
+
+```
+
+Rows rows in `ssp_base` that do not have education information are filtered, and joined with the `age_edu_map` data frame to produce `ssp_edu`.
+
+```{r}
+
+ssp_edu <- ssp_base %>%
+  filter(VARIABLE %in% age_edu_map$VARIABLE) %>%
+  full_join(age_edu_map, 
+            by = "VARIABLE") %>%
+  arrange(min_age)
+
+```
+
+Reshape the `ssp_edu` data frame into a long version, `ssp_edu_long`.
+
+```{r}
+
+ssp_edu_long <- ssp_edu %>% 
+  dplyr::select(-MODEL, -VARIABLE, -UNIT) %>%
+  tidyr::pivot_longer(cols = starts_with("X"),
+               names_to = "year",
+               names_prefix = "X",
+               values_to = "millions") %>%
+  dplyr::mutate(year = as.numeric(year)) %>%
+  tidyr::drop_na()
+
+head(ssp_edu_long)
+
+```
+
+
+```{r}
+
+ssp_kcal_edu <- ssp_edu_long %>% 
+  dplyr::full_join(fit_data_final, 
+                   by = c("gender", "min_age", "max_age", "activity_level")) %>% 
+  dplyr::mutate(Mkcal_perDay = kcal_mean*millions)
+
+ssp_kcal_edu
+
+```
+
+Let's take stock and summarise what we have so far: let's aggregate these data to produce global metabolic energy demand curves as before, but this time having accounted for activity levels by SSP.
+
+```{r}
+
+sum_ssp_kcal_edu <- ssp_kcal_edu %>% 
+  dplyr::group_by(SCENARIO, year) %>% 
+  dplyr::summarise(total_kcal_perDay2 = sum(Mkcal_perDay, 
+                                           na.rm = TRUE), 
+                   .groups = "drop")
+
+sum_ssp_kcal_edu
+
+```
+
+Compare these with plots.
+
+```{r}
+
+kcal_deficit <- sum_ssp_kcal %>% 
+  dplyr::full_join(sum_ssp_kcal_edu, 
+                   by = c("SCENARIO", "year")) %>% 
+  dplyr::mutate(surplus = total_kcal_perDay - total_kcal_perDay2) %>% 
+  dplyr::select(SCENARIO, year, surplus)
+
+```
+
+TODO I need to figure out a better way of representing this in a figure.
+
+```{r}
+
+p3 <- ggplot(kcal_deficit, 
+             aes(x = year, y = surplus)) + 
+  geom_hline(yintercept = 0, 
+             alpha = 0.8) + 
+  geom_line(aes(colour = SCENARIO), 
+            size = 1.2, 
+            alpha = 0.8) + 
+  labs(
+    title = "Difference between average/moderate case and detailed activity/education case", 
+    subtitle = "Data: IIASA & FAO", 
+    x = "Year", 
+    y = "M kcal per day", 
+    colour = "Scenario"
+  ) + 
+  scale_color_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  scale_y_continuous(labels = scientific) + 
+  theme_minimal()
+
+p3
+
+```
+
+I am especially interested in how these numbers behave by region. The ISO Alpha-3 country codes need to be mapped onto geographic regions.
+
+```{r}
+#maps FAO, UN, and sub-region names to numeric and ISO Alpha-3 alphanumeric codes.
+
+loc_map <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/location_code_map_data.csv", 
+  col_types = cols(
+    Location   = col_character(), 
+    LocID      = col_number(), 
+    ISO3_Code  = col_character(), 
+    SubRegID   = col_number(), 
+    SubRegName = col_character(), 
+    Area.Code  = col_number(), 
+    Area       = col_character())
+) %>% 
+  dplyr::select(-X1) %>% 
+  drop_na()
+
+country_regions <- loc_map %>% 
+  dplyr::select(-LocID, -SubRegID, -Area.Code, -Area) %>% 
+  dplyr::rename(
+    REGION = ISO3_Code
+  )
+
+missing_locs <- data.frame(
+  REGION = c("FSM", "CIV", "PRK", "PSE", "REU"), 
+  Location = c("Micronesia, Federated States of", "Côte d'Ivoire", "Korea, Dem. Peop. Rep.", "Palestinian Territory", "Réunion"), 
+  LocID = c(583, 384, 408, 275, 638), 
+  SubRegName = c("Micronesia", "Western Africa", "Eastern Asia", "Western Asia", "Eastern Africa")
+)
+
+country_regions <- country_regions %>% 
+  dplyr::bind_rows(missing_locs %>% 
+                     dplyr::select(Location, REGION, SubRegName))
+
+
+```
+
+
+```{r}
+
+ssp_kcal_edu_regions <- ssp_kcal_edu %>% 
+  dplyr::full_join(country_regions, 
+                   by = "REGION") %>% 
+  dplyr::group_by(SCENARIO, SubRegName, year) %>% 
+  dplyr::summarise(sum_Mkcal_perDay = sum(Mkcal_perDay, 
+                                          na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  tidyr::drop_na()
+  
+
+```
+
+Differences from the 2010 case, for 2025, 2050, 2075, and 2100.
+```{r}
+ssp_kcal_edu_regions_summary <- ssp_kcal_edu_regions %>% 
+  # dplyr::group_by(SCENARIO, SubRegName, year) %>% 
+  dplyr::mutate(norm = ifelse(year == 2010, 
+                              sum_Mkcal_perDay, 
+                              NA)) %>% 
+  tidyr::fill(norm) %>% 
+  dplyr::mutate(Mkcal_2010norm = (sum_Mkcal_perDay - norm)/norm) %>% 
+  dplyr::filter(year %in% c(2050, 2075, 2100))
+```
+
+```{r}
+
+library(scales)
+
+p4_asia <- ggplot(ssp_kcal_edu_regions_summary %>% 
+               dplyr::filter(SubRegName %in% c("Central Asia", "Eastern Asia", "South-Eastern Asia", "Southern Asia", "Western Asia")), 
+       aes(x = as.factor(year), 
+           y = Mkcal_2010norm)) + 
+  geom_col(aes(fill = SCENARIO), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  scale_fill_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  geom_hline(yintercept = 0, 
+             alpha = 0.8, 
+             size = 0.25) + 
+  labs(
+    x = "year"
+  ) + 
+  facet_wrap(~SubRegName, 
+             ncol = 2) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 0), 
+    axis.text.y = element_text(size = 6)
+  ) + 
+  panel_border() + 
+  scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
+
+p4_africa <- ggplot(ssp_kcal_edu_regions_summary %>% 
+               dplyr::filter(SubRegName %in% c("Eastern Africa", "Middle Africa", "Northern Africa", "Southern Africa", "Western Africa")), 
+       aes(x = as.factor(year), 
+           y = Mkcal_2010norm)) + 
+  geom_col(aes(fill = SCENARIO), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  scale_fill_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  geom_hline(yintercept = 0, 
+             alpha = 0.8, 
+             size = 0.25) + 
+  facet_wrap(~SubRegName, 
+             nrow = 3) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 0), 
+    axis.text.y = element_text(size = 6)
+  ) + 
+  panel_border() + 
+  scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
+
+p4_europe <- ggplot(ssp_kcal_edu_regions_summary %>% 
+               dplyr::filter(SubRegName %in% c("Eastern Europe", "Northern Europe", "Southern Europe", "Western Europe")), 
+       aes(x = as.factor(year), 
+           y = Mkcal_2010norm)) + 
+  geom_col(aes(fill = SCENARIO), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  scale_fill_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  geom_hline(yintercept = 0, 
+             alpha = 0.8, 
+             size = 0.25) + 
+  facet_wrap(~SubRegName, 
+             ncol = 2) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 0), 
+    axis.text.y = element_text(size = 6)
+  ) + 
+  panel_border() + 
+  scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
+
+p4_newworld <- ggplot(ssp_kcal_edu_regions_summary %>% 
+               dplyr::filter(SubRegName %in% c("Caribbean", "Northern America", "South America")), 
+       aes(x = as.factor(year), 
+           y = Mkcal_2010norm)) + 
+  geom_col(aes(fill = SCENARIO), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  scale_fill_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  geom_hline(yintercept = 0, 
+             alpha = 0.8, 
+             size = 0.25) + 
+  facet_wrap(~SubRegName, 
+             ncol = 2) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 0), 
+    axis.text.y = element_text(size = 6)
+  ) + 
+  panel_border() + 
+  scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
+
+p4_oceania <- ggplot(ssp_kcal_edu_regions_summary %>% 
+               dplyr::filter(SubRegName %in% c("Australia/New Zealand", "Melanesia", "Micronesia", "Polynesia")), 
+       aes(x = as.factor(year), 
+           y = Mkcal_2010norm)) + 
+  geom_col(aes(fill = SCENARIO), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  scale_fill_discrete(name = "Scenario", labels = c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")) + 
+  geom_hline(yintercept = 0, 
+             alpha = 0.8, 
+             size = 0.25) + 
+  facet_wrap(~SubRegName, 
+             ncol = 2) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 0), 
+    axis.text.y = element_text(size = 6)
+  ) + 
+  panel_border() + 
+  scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
+
+p4_asia
+p4_africa
+p4_europe
+p4_newworld
+p4_oceania
+```
+
+
+
+
+## Nutrition information
+
+### Acceptable macronutrient distribution range (AMDR)
+
+To make this estimate, I used nutrition information charts produced by the National Academy of Science (NAS) in 2002.
+
+Source: [Lupton, J. R., Brooks, J. A., Butte, N. F., Caballero, B., Flatt, J. P., & Fried, S. K. (2002). Dietary reference intakes for energy, carbohydrate, fiber, fat, fatty acids, cholesterol, protein, and amino acids. National Academy Press: Washington, DC, USA, 5, 589-768.](http://www.nationalacademies.org/hmd/~/media/Files/Activity%20Files/Nutrition/DRI-Tables/8_Macronutrient%20Summary.pdf)
+
+I collapse the AMD-ranges into singular mean values of AMDR for each distinct age cohort and gender group. These mean-AMDR values are passed to a new `healthy_diet` data frame.
+
+```{r}
+
+nas_diet <- read.csv(paste0(data_path,
+                            "NAS_diet_AMDR_byAge.csv"), 
+                     stringsAsFactors = FALSE)
+# head(nas_diet)
+
+healthy_diet <- nas_diet %>% 
+  dplyr::mutate(mean_AMDR = 0.5*(min_AMDR + max_AMDR), 
+         age = 0.5*(min_age + max_age)) %>% 
+  dplyr::group_by(min_age, max_age, gender) %>% 
+  dplyr::mutate(mean_AMDR_normalized = mean_AMDR/sum(mean_AMDR)) %>% 
+  dplyr::ungroup()
+
+healthy_diet$min_age <- as.double(healthy_diet$min_age)
+healthy_diet$max_age <- as.double(healthy_diet$max_age)
+
+```
+
+Check: This test confirms that the normalization worked correctly. (Should be TRUE.)
+```{r}
+
+test <- healthy_diet %>%
+  dplyr::group_by(age, gender) %>%
+  dplyr::summarise(should_be_unity = sum(mean_AMDR_normalized), 
+            .groups = "drop") %>% 
+  dplyr::pull(should_be_unity)
+
+all(test == 1)
+
+```
+
+```{r}
+
+p5 <- ggplot(healthy_diet, aes(x = age, y = mean_AMDR_normalized)) + 
+  geom_point(aes(colour = nutrient, 
+                shape = gender)) + 
+  scale_color_manual(values = c("carbohydrate" = "darkgreen", 
+                                "total_fat" = "darkblue", 
+                                "protein" = "firebrick")) + 
+  scale_shape_manual(values = c("male" = 2, "female" = 3)) + 
+  labs(
+    x = "Age (yrs)", 
+    y = "mean AMDR", 
+    colour = "Nutrient"
+  ) + 
+  theme_minimal()
+
+p5
+
+```
+
+
 
