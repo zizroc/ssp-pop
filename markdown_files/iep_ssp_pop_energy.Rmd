@@ -198,7 +198,7 @@ Fuel energy values are in Mtoe. Convert these to more sensible units (1 Mtoe = 1
 
 conversion = 1.163e7
 
-pec_regions <- PEC_wide %>% 
+pec_countries <- PEC_wide %>% 
   dplyr::full_join(country_regions, 
                    by = "iso3") %>% 
   dplyr::filter(!is.na(SubRegName)) %>% 
@@ -216,6 +216,25 @@ pec_regions <- PEC_wide %>%
   ) %>% 
   dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + geothermal + hydro + nuclear + peat + solar_tidal_wave_fuelcell + wind)
 
+```
+
+```{r}
+pec_regions <- pec_countries %>% 
+  group_by(SubRegName, year) %>% 
+  summarise(
+    biodiesel = sum(biodiesel, na.rm = TRUE), 
+    biomass_waste = sum(biomass_waste, na.rm = TRUE),  
+    coal = sum(coal, na.rm = TRUE), 
+    fuel_ethanol = sum(fuel_ethanol, na.rm = TRUE), 
+    geothermal = sum(geothermal, na.rm = TRUE), 
+    hydro = sum(hydro, na.rm = TRUE), 
+    nuclear = sum(nuclear, na.rm = TRUE), 
+    peat = sum(peat, na.rm = TRUE), 
+    solar_tidal_wave_fuelcell = sum(solar_tidal_wave_fuelcell, na.rm = TRUE), 
+    wind = sum(wind, na.rm = TRUE), 
+    total = sum(total, na.rm = TRUE), 
+    .groups = "drop"
+    )
 ```
 
 Now relative quantities -- should sum to total = 1.
@@ -241,7 +260,122 @@ pec_regions_rel <- pec_regions %>%
 
 ```{r}
 
+pec_regions_rel_long <- pec_regions_rel %>% 
+  dplyr::select(-total) %>% 
+  tidyr::pivot_longer(data = ., 
+                      cols = biodiesel:wind, 
+                      names_to = "fuel")
 
+```
+
+
+```{r}
+
+p1_asia <- ggplot(data = pec_regions_rel_long %>% 
+                    dplyr::filter(SubRegName %in% c("Central Asia", "Eastern Asia", "South-Eastern Asia", "Southern Asia", "Western Asia")), 
+       aes(x = year, 
+           y = value)) + 
+  geom_area(aes(fill = fuel)) + 
+  facet_wrap(~SubRegName) + 
+  theme_minimal_hgrid() + 
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "bottom", 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 90), 
+    axis.text.y = element_text(size = 6), 
+    axis.title = element_blank()
+  ) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(
+    title = "Relative contribution to PEC"
+  )
+
+p1_africa <- ggplot(data = pec_regions_rel_long %>% 
+                    dplyr::filter(SubRegName %in% c("Eastern Africa", "Middle Africa", "Northern Africa", "Southern Africa", "Western Africa")), 
+       aes(x = year, 
+           y = value)) + 
+  geom_area(aes(fill = fuel)) + 
+  facet_wrap(~SubRegName) + 
+  theme_minimal_hgrid() + 
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "bottom", 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 90), 
+    axis.text.y = element_text(size = 6), 
+    axis.title = element_blank()
+  ) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(
+    title = "Relative contribution to PEC"
+  )
+
+p1_europe <- ggplot(data = pec_regions_rel_long %>% 
+                    dplyr::filter(SubRegName %in% c("Eastern Europe", "Northern Europe", "Southern Europe", "Western Europe")), 
+       aes(x = year, 
+           y = value)) + 
+  geom_area(aes(fill = fuel)) + 
+  facet_wrap(~SubRegName) + 
+  theme_minimal_hgrid() + 
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "bottom", 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 90), 
+    axis.text.y = element_text(size = 6), 
+    axis.title = element_blank()
+  ) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(
+    title = "Relative contribution to PEC"
+  )
+
+p1_newworld <- ggplot(data = pec_regions_rel_long %>% 
+                    dplyr::filter(SubRegName %in% c("Caribbean", "Northern America", "South America")), 
+       aes(x = year, 
+           y = value)) + 
+  geom_area(aes(fill = fuel)) + 
+  facet_wrap(~SubRegName) + 
+  theme_minimal_hgrid() + 
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "bottom", 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 90), 
+    axis.text.y = element_text(size = 6), 
+    axis.title = element_blank()
+  ) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(
+    title = "Relative contribution to PEC"
+  )
+
+p1_oceania <- ggplot(data = pec_regions_rel_long %>% 
+                    dplyr::filter(SubRegName %in% c("Australia/New Zealand", "Melanesia", "Micronesia", "Polynesia")), 
+       aes(x = year, 
+           y = value)) + 
+  geom_area(aes(fill = fuel)) + 
+  facet_wrap(~SubRegName) + 
+  theme_minimal_hgrid() + 
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "bottom", 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_text(size = 8, angle = 90), 
+    axis.text.y = element_text(size = 6), 
+    axis.title = element_blank()
+  ) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(
+    title = "Relative contribution to PEC"
+  )
+
+p1_asia
+p1_africa
+p1_europe
+p1_newworld
+p1_oceania
 
 ```
 

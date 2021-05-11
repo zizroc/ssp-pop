@@ -776,7 +776,7 @@ ssp_kcal_edu <- ssp_edu_long %>%
                    by = c("gender", "min_age", "max_age", "activity_level")) %>% 
   dplyr::mutate(Mkcal_perDay = kcal_mean*millions)
 
-ssp_kcal_edu
+head(ssp_kcal_edu)
 
 ```
 
@@ -790,7 +790,7 @@ sum_ssp_kcal_edu <- ssp_kcal_edu %>%
                                            na.rm = TRUE), 
                    .groups = "drop")
 
-sum_ssp_kcal_edu
+head(sum_ssp_kcal_edu)
 
 ```
 
