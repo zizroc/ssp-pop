@@ -14,7 +14,7 @@ library(cowplot)
 
 ## Introduction
 
-In this document, I compute the (healthy) energy requirement (in kcal/day) for the global population from the present to 2100 based on five shared socioeconomic pathways (SSPs). Assuming that level of education, as given in the SSP data, is a good proxy for level of activity required in a healthy diet (with the poorly educated being more likely to do manual labour and therefore requiring relatively greater dietary energy), I show that estimates based on uniformly "moderate" activity level under-estimates the necessary kcal quantity in the near term for all SSPs, and over-estimates it in the long term for SSP1, 2, and 4. For SSP3 and 5, the uniformly "moderate" assumption under-estimates over the entire time-series.
+In this document, I compute the (healthy) metabolic food energy requirement (in kcal/day) for the global population from the present to 2100 based on five shared socioeconomic pathways (SSPs). Assuming that level of education, as given in the SSP data, is a good proxy for level of activity required in a healthy diet (with the poorly educated being more likely to do manual labour and therefore requiring relatively greater dietary energy), I show that estimates based on uniformly "moderate" activity level under-estimates the necessary kcal quantity in the near term for all SSPs, and over-estimates it in the long term for SSP1, 2, and 4. For SSP3 and 5, the uniformly "moderate" assumption under-estimates over the entire time-series.
 
 ## Load data
 
@@ -22,7 +22,7 @@ In this document, I compute the (healthy) energy requirement (in kcal/day) for t
 
 Read in population data from the SSP database at IIASA. Reference: [Keywan Riahi, et al. (2017). The Shared Socioeconomic Pathways and their energy, land use, and greenhouse gas emissions implications: An overview, Global Environmental Change, Volume 42, Pages 153-168, ISSN 0959-3780, DOI:110.1016/j.gloenvcha.2016.05.009](https://secure.iiasa.ac.at/web-apps/ene/SspDb/dsd?Action=htmlpage&page=10)
 
-```{r cars}
+```{r}
 ssp_path <- "/home/thomson/Data/SSPs/"
 
 ssp_base <- read.csv(file = paste0(ssp_path, 
@@ -35,7 +35,7 @@ ssp_base <- read.csv(file = paste0(ssp_path,
 
 At this stage, I am only interested in pulling the data for total female and male populations in each age bracket. Later, I include education level.
 
-```{r pressure, echo=FALSE}
+```{r, echo=FALSE}
 
 for(i in seq(0, 100, by = 5)){
   tmp1 <- paste0("Population|Female|Aged", i, "-", i+4)
@@ -130,9 +130,9 @@ ggplot(data = ssp_world_long %>%
 
 output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
 
-if(!exists(ssp_world_long)) {
-  load(file = paste0(output_path, "ssp_world_long.Rdata"))
-}
+
+load(file = paste0(output_path, "ssp_world_long.Rdata"))
+
 
 ```
 
@@ -404,7 +404,7 @@ clean_fit_data <- extracted_fit_data %>%
                    by = c("gender", "activity_level", "age")) %>% 
   dplyr::arrange(age)
 
-clean_fit_data
+head(clean_fit_data)
 
 ```
 
@@ -1044,6 +1044,8 @@ Source: [Lupton, J. R., Brooks, J. A., Butte, N. F., Caballero, B., Flatt, J. P.
 
 I collapse the AMD-ranges into singular mean values of AMDR for each distinct age cohort and gender group. These mean-AMDR values are passed to a new `healthy_diet` data frame.
 
+Additionally, the 'mean_AMDR' values for all of the macronutrients do not always sum to 1; so I add an additional 'mean_AMDR_normalized' column to account for this. The 'range_AMDR' column, giving a sense of the uncertainty around the mean value, is unchanged.
+
 ```{r}
 
 nas_diet <- read.csv(paste0(data_path,
@@ -1053,7 +1055,8 @@ nas_diet <- read.csv(paste0(data_path,
 
 healthy_diet <- nas_diet %>% 
   dplyr::mutate(mean_AMDR = 0.5*(min_AMDR + max_AMDR), 
-         age = 0.5*(min_age + max_age)) %>% 
+                range_AMDR = 0.5*(max_AMDR - min_AMDR), 
+                age = 0.5*(min_age + max_age)) %>% 
   dplyr::group_by(min_age, max_age, gender) %>% 
   dplyr::mutate(mean_AMDR_normalized = mean_AMDR/sum(mean_AMDR)) %>% 
   dplyr::ungroup()
@@ -1096,5 +1099,136 @@ p5
 
 ```
 
+The `ssp_kcal_edu` data frame is next joined with the `healthy_diet` data frame, generating the `ssp_kcal_edu_macronutrients` data frame.
 
+```{r}
+
+ssp_kcal_edu_macronutrients <- ssp_kcal_edu %>% 
+  dplyr::full_join(healthy_diet, 
+                   by = c("gender", "min_age", "max_age")) %>% 
+  dplyr::mutate(Mkcal_mean_AMDR = Mkcal_perDay*mean_AMDR_normalized, 
+                Mkcal_range_AMDR = Mkcal_perDay*(1e-2)*range_AMDR)
+
+ssp_kcal_edu_macronutrients
+
+```
+
+Analyze `ssp_kcal_edu_macronutrients` to determine how the demand for macronutrients is likely to evolve in time.
+
+```{r}
+
+sum_ssp_kcal_edu_macronutrients <- ssp_kcal_edu_macronutrients %>% 
+  dplyr::group_by(SCENARIO, year, nutrient) %>% 
+  dplyr::summarise(sum_mean_AMDR = sum(Mkcal_mean_AMDR), 
+                   sum_range_AMDR = sum(Mkcal_range_AMDR), 
+                   .groups = "drop") %>% 
+  tidyr::drop_na()
+
+```
+
+```{r}
+
+ggplot(data = sum_ssp_kcal_edu_macronutrients, 
+       aes(x = year, 
+           y = sum_mean_AMDR)) + 
+  geom_line(aes(colour = nutrient), 
+                size = 1.2, 
+                alpha = 0.8) + 
+      scale_color_discrete(name = "Macronutrient", labels = c("carbohydrate", "protein", "fat")) + 
+  geom_line(aes(y = sum_mean_AMDR + sum_range_AMDR, 
+                colour = nutrient), 
+            size = 0.25, 
+            linetype = 2, 
+            alpha = 0.6) + 
+  geom_line(aes(y = sum_mean_AMDR - sum_range_AMDR, 
+                colour = nutrient), 
+            size = 0.25, 
+            linetype = 2, 
+            alpha = 0.6) + 
+  facet_wrap(~SCENARIO, 
+             labeller = as_labeller(
+               c("SSP1_v9_130115" = "SSP1", 
+                 "SSP2_v9_130115" = "SSP2",
+                 "SSP3_v9_130115" = "SSP3",
+                 "SSP4d_v9_130115"= "SSP4",
+                 "SSP5_v9_130115" = "SSP5"))) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    axis.text = element_text(size = 10)
+  ) + 
+  labs(
+    title = "Average minimum daily required macronutrient calories", 
+    x = "year", 
+    y = "Mkcal per day"
+  )
+
+```
+
+```{r}
+
+diff_ssp_kcal_edu_macronutrients <- sum_ssp_kcal_edu_macronutrients %>% 
+  dplyr::mutate(mean_AMDR_2010 = ifelse(year == 2010, 
+                                        sum_mean_AMDR, 
+                                        NA)) %>% 
+  dplyr::group_by(SCENARIO, nutrient) %>% 
+  tidyr::fill(mean_AMDR_2010) %>% 
+  ungroup() %>% 
+  dplyr::mutate(mean_AMDR_absdiff2010 = sum_mean_AMDR - mean_AMDR_2010) %>% 
+  dplyr::filter(year %in% c(2050, 2075, 2100))
+
+diff_ssp_kcal_edu_macronutrients
+```
+
+
+```{r}
+ggplot(data = diff_ssp_kcal_edu_macronutrients, 
+       aes(x = as.factor(year), 
+           y = mean_AMDR_absdiff2010, 
+           fill = nutrient)) + 
+  geom_bar(stat="identity",  
+           position = "dodge", 
+           alpha = 0.9) + 
+  geom_hline(yintercept = 0, 
+             size = 0.25, 
+             alpha = 0.8) + 
+  # geom_errorbar(aes(ymin = mean_AMDR_absdiff2010 - sum_range_AMDR, 
+  #                   ymax = mean_AMDR_absdiff2010 + sum_range_AMDR, 
+  #                   color = nutrient), 
+  #               width = 0.5, 
+  #               position = position_dodge(0.9), 
+  #               alpha = 0.6) + 
+  # scale_colour_discrete(guide = FALSE) + 
+  scale_fill_brewer(name = "Macronutrient", 
+                      labels = c("carbohydrate", "protein", "fat"), 
+                      palette = "Set2") + 
+  facet_wrap(~SCENARIO, 
+             labeller = as_labeller(
+               c("SSP1_v9_130115" = "SSP1", 
+                 "SSP2_v9_130115" = "SSP2",
+                 "SSP3_v9_130115" = "SSP3",
+                 "SSP4d_v9_130115"= "SSP4",
+                 "SSP5_v9_130115" = "SSP5"))) + 
+  theme_minimal_hgrid() + 
+  theme(
+    title = element_text(size = 12), 
+    legend.title = element_blank(), 
+    legend.position = "top", 
+    axis.title = element_text(size = 12), 
+    axis.text = element_text(size = 11)
+  ) + 
+  labs(
+    title = "Difference in metabolic energy demand from 2010 by macronutrient", 
+    x = "year", 
+    y = "Mkcal per day"
+  )
+```
+
+
+
+```{r}
+
+
+
+```
 

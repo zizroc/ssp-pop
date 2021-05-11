@@ -1,0 +1,247 @@
+---
+title: "Primary energy consumption requirements based on SSPs"
+author: "Marcus J Thomson"
+date: "5/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(cowplot)
+library(stringr)
+library(scatterpie)
+library(broom)
+library(scales)
+```
+
+## Introduction
+
+In this document, I compute the primary energy consumption (in MJ/day) for the global population from the present to 2100 based on five shared socioeconomic pathways (SSPs).
+
+## Load data
+
+### Population data
+
+Read in population data from the SSP database at IIASA. Reference: [Keywan Riahi, et al. (2017). The Shared Socioeconomic Pathways and their energy, land use, and greenhouse gas emissions implications: An overview, Global Environmental Change, Volume 42, Pages 153-168, ISSN 0959-3780, DOI:110.1016/j.gloenvcha.2016.05.009](https://secure.iiasa.ac.at/web-apps/ene/SspDb/dsd?Action=htmlpage&page=10)
+
+```{r}
+
+output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
+load(file = paste0(output_path, "ssp_world_long.Rdata"))
+
+```
+
+
+### Primary energy consumption
+
+Read in the PEC from The Shift Project data portal: [TSP data portal (2020)](https://theshiftdataportal.org/).
+
+The good people at The Shift Project have collected data from a variety of sources, and put these into online, open-access databases. I have pulled these data for PEC and organised it into a data frame, PEC_wide, containing energy consumption (in units of megatonnes oil equivalent, Mtoe) for each country, for years starting roughly from 1980 (some later). There are gaps in these data for some countries not covered, or some years missed, that I will need to fill later.
+
+Among the data files are a few whose names defeat my (low level ninja) grep skills. Awkward column names were replaced, as was a strange time-stamp convention they're using for date. The new data frame, PEC_wide, is clean.
+
+```{r}
+
+path_main <- "~/Projects/iep_food/data/energy/TSP"
+path_tsp  <- paste0(path_main, "/countries")
+
+path_dir <- dir(path_tsp, 
+                full.names = TRUE)
+
+tmp1 <- path_dir[grep("Primary Energy Consumption by source, ", path_dir)]
+tmp2 <- gsub("/home/thomson/Projects/iep_food/data/energy/TSP/countries/Primary Energy Consumption by source, ", "", tmp1)
+tmp3 <- unlist(str_split(tmp2, ","))
+tmp4 <- tmp3[order(tmp3)]
+tmp5 <- c(" 1980-1991 (in Mtoe).csv", " 1980-1992 (in Mtoe).csv", " 1980-2016 (in Mtoe).csv", " 1986-2016 (in Mtoe).csv", " 1990-2016 (in Mtoe).csv", " 1992-2016 (in Mtoe).csv", " 1993-2016 (in Mtoe).csv", " 1994-2016 (in Mtoe).csv", " 1997-2016 (in Mtoe).csv", " 2003-2016 (in Mtoe).csv", " 2006-2016 (in Mtoe).csv", " 2008-2016 (in Mtoe).csv", " 2012-2016 (in Mtoe).csv")
+tsp_countries <- as.data.frame(tmp4[!tmp4 %in% tmp5], 
+                               stringsAsFactors = FALSE)
+names(tsp_countries) <- "tsp_country"
+
+```
+
+I made separate files to: (1) map the country names used by TSP onto ISO-alpha2 and ISO-alpha3 codes as well as standard names from the FAO; and (2) group countries by geographic reigon. These files will appear separately in the repository.
+
+```{r, echo = FALSE}
+
+country_names <- read.csv(file = path_dir[grep("tsp_fao_country_mapper", path_dir)], 
+                          header = TRUE, 
+                          stringsAsFactors = FALSE)
+
+fao_countrygroup <- read.csv(file = "~/Projects/iep_food/data/FAO/fao_countrygroup.csv", 
+                             header = TRUE, 
+                             stringsAsFactors = FALSE) %>% 
+  dplyr::select(Country.Group, ISO3.Code) %>% 
+  ungroup() %>% 
+  rename(iso3 = ISO3.Code) %>% 
+  filter(Country.Group %in% c("Southern Asia", "Southern Europe", "Northern Africa", "Oceania", "Middle Africa", "South America", "Western Asia", "Western Europe", "Eastern Europe", "Central America", "Western Africa", "Northern America", "Southern Africa", "South-eastern Asia", "Eastern Africa", "Northern Europe", "Eastern Asia", "Central Asia", "Caribbean"))
+
+```
+
+Since I will be making maps, I will also load map data included with the ggplot2 package. These data include some non-standard country names, so I made a mapping file for these as well.
+
+```{r, echo = FALSE}
+worldmap <- map_data("world") %>% 
+  filter(region != "Antarctica")
+
+mapdata_fao_mapper <- read.csv(file = "~/Projects/iep_food/data/FAO/mapdata_fao_mapper.csv", 
+                               header = TRUE, 
+                               stringsAsFactors = FALSE) %>% 
+  rename(region = ggplot_mapdata, 
+         iso3 = iso_code) %>% 
+  full_join(fao_countrygroup, 
+            by = "iso3")
+
+```
+
+
+
+```{r, echo = FALSE}
+
+index <- grep("Primary Energy Consumption by source, ", 
+              path_dir)
+
+for(i in seq_along(index)){
+
+  # tmp0 <- path_dir[grep(paste0("Primary Energy Consumption by source, ",
+  #                              country_names[i, 1],
+  #                              "\\b"),
+  #                       path_dir)]
+  tmp0 <- path_dir[i]
+  tmp1 <- read.csv(file = tmp0,
+                 header = TRUE,
+                 stringsAsFactors = FALSE) %>%
+  rename(oil = Oil,
+         coal = Coal,
+         gas = Gas,
+         nuclear = Nuclear,
+         hydro = Hydroelectricity,
+         biomass_waste = Biomass.and.Waste,
+         wind = Wind,
+         solar_tidal_wave_fuelcell = Solar..Tide..Wave..Fuel.Cell,
+         fuel_ethanol = Fuel.Ethanol,
+         geothermal = Geothermal,
+         biodiesel = Biodiesel,
+         peat = Peat) %>%
+  mutate(year = gsub("-01-01 00:00:00", " ", X) %>%
+           as.integer()) %>%
+  mutate(country     = country_names[i, 1],
+         country_fao = country_names[i, 4],
+         iso2        = country_names[i, 2],
+         iso3        = country_names[i, 3]) %>%
+  dplyr::select(country,
+                iso3,
+                year,
+                oil:peat)
+
+  if(i==1) Tmp <- tmp1
+  if(i >1) Tmp <- rbind(Tmp, tmp1)
+
+}
+
+PEC_wide <- Tmp
+
+# save(PEC_wide, file = "~/Projects/IEP_2/sourcefiles/global_pec_wide.Rdata")
+```
+
+
+
+```{r, echo = FALSE}
+
+if(!exists("PEC_wide")) { 
+  load(file = "~/Projects/IEP_2/sourcefiles/global_pec_wide.Rdata") 
+}
+
+```
+
+
+```{r}
+
+loc_map <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/location_code_map_data.csv", 
+  col_types = cols(
+    Location   = col_character(), 
+    LocID      = col_number(), 
+    ISO3_Code  = col_character(), 
+    SubRegID   = col_number(), 
+    SubRegName = col_character(), 
+    Area.Code  = col_number(), 
+    Area       = col_character())
+) %>% 
+  dplyr::select(-X1) %>% 
+  drop_na()
+
+country_regions <- loc_map %>% 
+  dplyr::select(-LocID, -SubRegID, -Area.Code, -Area) %>% 
+  dplyr::rename(
+    REGION = ISO3_Code
+  )
+
+missing_locs <- data.frame(
+  REGION = c("FSM", "CIV", "PRK", "PSE", "REU"), 
+  Location = c("Micronesia, Federated States of", "Côte d'Ivoire", "Korea, Dem. Peop. Rep.", "Palestinian Territory", "Réunion"), 
+  LocID = c(583, 384, 408, 275, 638), 
+  SubRegName = c("Micronesia", "Western Africa", "Eastern Asia", "Western Asia", "Eastern Africa")
+)
+
+country_regions <- country_regions %>% 
+  dplyr::bind_rows(missing_locs %>% 
+                     dplyr::select(Location, REGION, SubRegName)) %>% 
+  dplyr::rename(iso3 = REGION)
+
+
+
+```
+
+Fuel energy values are in Mtoe. Convert these to more sensible units (1 Mtoe = 1.163e10 kWh = 1.163e7 MWh): MWh. 
+
+```{r}
+
+conversion = 1.163e7
+
+pec_regions <- PEC_wide %>% 
+  dplyr::full_join(country_regions, 
+                   by = "iso3") %>% 
+  dplyr::filter(!is.na(SubRegName)) %>% 
+  dplyr::mutate(
+    biodiesel = ifelse(!is.na(biodiesel), conversion*biodiesel, 0), 
+    biomass_waste = ifelse(!is.na(biomass_waste), conversion*biomass_waste, 0), 
+    coal = ifelse(!is.na(coal), conversion*coal, 0), 
+    fuel_ethanol = ifelse(!is.na(fuel_ethanol), conversion*fuel_ethanol, 0), 
+    geothermal = ifelse(!is.na(geothermal), conversion*geothermal, 0), 
+    hydro = ifelse(!is.na(hydro), conversion*hydro, 0), 
+    nuclear = ifelse(!is.na(nuclear), conversion*nuclear, 0), 
+    peat = ifelse(!is.na(peat), conversion*peat, 0), 
+    solar_tidal_wave_fuelcell = ifelse(!is.na(solar_tidal_wave_fuelcell), conversion*solar_tidal_wave_fuelcell, 0), 
+    wind = ifelse(!is.na(wind), conversion*wind, 0) 
+  ) %>% 
+  dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + geothermal + hydro + nuclear + peat + solar_tidal_wave_fuelcell + wind)
+
+```
+
+Now relative quantities -- should sum to total = 1.
+
+```{r}
+
+pec_regions_rel <- pec_regions %>% 
+  dplyr::mutate(
+    biodiesel = ifelse(total != 0, biodiesel/total, 0), 
+    biomass_waste = ifelse(total != 0, biomass_waste/total, 0), 
+    coal = ifelse(total != 0, coal/total, 0), 
+    fuel_ethanol = ifelse(total != 0, fuel_ethanol/total, 0), 
+    geothermal = ifelse(total != 0, geothermal/total, 0), 
+    hydro = ifelse(total != 0, hydro/total, 0), 
+    nuclear = ifelse(total != 0, nuclear/total, 0), 
+    peat = ifelse(total != 0, peat/total, 0), 
+    solar_tidal_wave_fuelcell = ifelse(total != 0, solar_tidal_wave_fuelcell/total, 0), 
+    wind = ifelse(total != 0, wind/total, 0) 
+  ) %>% 
+  dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + geothermal + hydro + nuclear + peat + solar_tidal_wave_fuelcell + wind)
+
+```
+
+```{r}
+
+
+
+```
+
