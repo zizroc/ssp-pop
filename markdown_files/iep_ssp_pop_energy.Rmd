@@ -144,13 +144,14 @@ PEC_wide <- Tmp
 # save(PEC_wide, file = "~/Projects/IEP_2/sourcefiles/global_pec_wide.Rdata")
 ```
 
-
+NB: I think that these values are about 10 times higher than they should be. When I compare them to the per capita total energy from the World Bank data (and other sources ad hoc), keeping in mind that total energy consumption per capita should be above PEC per capita, I get roughly 10+ times below the PEC numbers. I will introduce a fudge factor below to rectify this -- but obviously I should understand where this difference comes from. (I have checked the Mtoe to MWh conversion.)
 
 ```{r, echo = FALSE}
 
-if(!exists("PEC_wide")) { 
-  load(file = "~/Projects/IEP_2/sourcefiles/global_pec_wide.Rdata") 
-}
+load(file = "~/Projects/IEP_2/sourcefiles/global_pec_wide.Rdata") 
+
+PEC_wide <- PEC_wide %>% 
+  mutate(across(.cols = oil:peat, ~.x/10))
 
 ```
 
@@ -201,22 +202,26 @@ conversion = 1.163e7
 pec_countries <- PEC_wide %>% 
   dplyr::full_join(country_regions, 
                    by = "iso3") %>% 
-  dplyr::filter(!is.na(SubRegName)) %>% 
+  dplyr::filter(!is.na(SubRegName) & year >= 2000) %>% 
   dplyr::mutate(
     biodiesel = ifelse(!is.na(biodiesel), conversion*biodiesel, 0), 
     biomass_waste = ifelse(!is.na(biomass_waste), conversion*biomass_waste, 0), 
     coal = ifelse(!is.na(coal), conversion*coal, 0), 
     fuel_ethanol = ifelse(!is.na(fuel_ethanol), conversion*fuel_ethanol, 0), 
+    gas = ifelse(!is.na(gas), conversion*gas, 0), 
     geothermal = ifelse(!is.na(geothermal), conversion*geothermal, 0), 
     hydro = ifelse(!is.na(hydro), conversion*hydro, 0), 
     nuclear = ifelse(!is.na(nuclear), conversion*nuclear, 0), 
+    oil = ifelse(!is.na(oil), conversion*oil, 0), 
     peat = ifelse(!is.na(peat), conversion*peat, 0), 
     solar_tidal_wave_fuelcell = ifelse(!is.na(solar_tidal_wave_fuelcell), conversion*solar_tidal_wave_fuelcell, 0), 
     wind = ifelse(!is.na(wind), conversion*wind, 0) 
   ) %>% 
-  dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + geothermal + hydro + nuclear + peat + solar_tidal_wave_fuelcell + wind)
+  dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + gas + geothermal + hydro + nuclear + oil + peat + solar_tidal_wave_fuelcell + wind)
 
 ```
+
+
 
 ```{r}
 pec_regions <- pec_countries %>% 
@@ -226,9 +231,11 @@ pec_regions <- pec_countries %>%
     biomass_waste = sum(biomass_waste, na.rm = TRUE),  
     coal = sum(coal, na.rm = TRUE), 
     fuel_ethanol = sum(fuel_ethanol, na.rm = TRUE), 
+    gas = sum(gas, na.rm = TRUE), 
     geothermal = sum(geothermal, na.rm = TRUE), 
     hydro = sum(hydro, na.rm = TRUE), 
     nuclear = sum(nuclear, na.rm = TRUE), 
+    oil = sum(oil, na.rm = TRUE), 
     peat = sum(peat, na.rm = TRUE), 
     solar_tidal_wave_fuelcell = sum(solar_tidal_wave_fuelcell, na.rm = TRUE), 
     wind = sum(wind, na.rm = TRUE), 
@@ -247,16 +254,20 @@ pec_regions_rel <- pec_regions %>%
     biomass_waste = ifelse(total != 0, biomass_waste/total, 0), 
     coal = ifelse(total != 0, coal/total, 0), 
     fuel_ethanol = ifelse(total != 0, fuel_ethanol/total, 0), 
+    gas = ifelse(total != 0, gas/total, 0), 
     geothermal = ifelse(total != 0, geothermal/total, 0), 
     hydro = ifelse(total != 0, hydro/total, 0), 
     nuclear = ifelse(total != 0, nuclear/total, 0), 
+    oil = ifelse(total != 0, oil/total, 0), 
     peat = ifelse(total != 0, peat/total, 0), 
     solar_tidal_wave_fuelcell = ifelse(total != 0, solar_tidal_wave_fuelcell/total, 0), 
     wind = ifelse(total != 0, wind/total, 0) 
   ) %>% 
-  dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + geothermal + hydro + nuclear + peat + solar_tidal_wave_fuelcell + wind)
+  dplyr::mutate(total = biodiesel + biomass_waste + coal + fuel_ethanol + gas + geothermal + hydro + nuclear + oil + peat + solar_tidal_wave_fuelcell + wind)
 
 ```
+
+
 
 ```{r}
 
@@ -271,11 +282,20 @@ pec_regions_rel_long <- pec_regions_rel %>%
 
 ```{r}
 
+labs <- c("biodiesel", "biomass & waste", "coal", "fuel-ethanol", "gas", "geothermal", "hydro", "nuclear", "oil", "peat", "solar & fuelcell", "wind")
+
+vals <- c("biodiesel" = "#ff5585", "biomass_waste" = "#CF8530", "coal" = "#320A26", "fuel_ethanol" = "#27c26f", "gas" = "#7D562E", "geothermal" = "#811DE2", "hydro" = "#1E1DE2", "nuclear" = "#E21D77", "oil" = "#7D2E2E", "peat" = "#736f64", "solar_tidal_wave_fuelcell" = "#C9CF30", "wind" = "#1D7EE2")
+
 p1_asia <- ggplot(data = pec_regions_rel_long %>% 
                     dplyr::filter(SubRegName %in% c("Central Asia", "Eastern Asia", "South-Eastern Asia", "Southern Asia", "Western Asia")), 
        aes(x = year, 
            y = value)) + 
-  geom_area(aes(fill = fuel)) + 
+  geom_area(aes(fill = fuel), 
+            alpha = 0.8) + 
+  scale_fill_manual(
+    labels = labs, 
+    values = vals
+    ) + 
   facet_wrap(~SubRegName) + 
   theme_minimal_hgrid() + 
   theme(
@@ -295,7 +315,12 @@ p1_africa <- ggplot(data = pec_regions_rel_long %>%
                     dplyr::filter(SubRegName %in% c("Eastern Africa", "Middle Africa", "Northern Africa", "Southern Africa", "Western Africa")), 
        aes(x = year, 
            y = value)) + 
-  geom_area(aes(fill = fuel)) + 
+  geom_area(aes(fill = fuel), 
+            alpha = 0.8) + 
+  scale_fill_manual(
+    labels = labs, 
+    values = vals
+    ) + 
   facet_wrap(~SubRegName) + 
   theme_minimal_hgrid() + 
   theme(
@@ -315,7 +340,12 @@ p1_europe <- ggplot(data = pec_regions_rel_long %>%
                     dplyr::filter(SubRegName %in% c("Eastern Europe", "Northern Europe", "Southern Europe", "Western Europe")), 
        aes(x = year, 
            y = value)) + 
-  geom_area(aes(fill = fuel)) + 
+  geom_area(aes(fill = fuel), 
+            alpha = 0.8) + 
+  scale_fill_manual(
+    labels = labs, 
+    values = vals
+    ) + 
   facet_wrap(~SubRegName) + 
   theme_minimal_hgrid() + 
   theme(
@@ -335,7 +365,12 @@ p1_newworld <- ggplot(data = pec_regions_rel_long %>%
                     dplyr::filter(SubRegName %in% c("Caribbean", "Northern America", "South America")), 
        aes(x = year, 
            y = value)) + 
-  geom_area(aes(fill = fuel)) + 
+  geom_area(aes(fill = fuel), 
+            alpha = 0.8) + 
+  scale_fill_manual(
+    labels = labs, 
+    values = vals
+    ) + 
   facet_wrap(~SubRegName) + 
   theme_minimal_hgrid() + 
   theme(
@@ -355,7 +390,12 @@ p1_oceania <- ggplot(data = pec_regions_rel_long %>%
                     dplyr::filter(SubRegName %in% c("Australia/New Zealand", "Melanesia", "Micronesia", "Polynesia")), 
        aes(x = year, 
            y = value)) + 
-  geom_area(aes(fill = fuel)) + 
+  geom_area(aes(fill = fuel), 
+            alpha = 0.8) + 
+  scale_fill_manual(
+    labels = labs, 
+    values = vals
+    ) + 
   facet_wrap(~SubRegName) + 
   theme_minimal_hgrid() + 
   theme(
@@ -376,6 +416,588 @@ p1_africa
 p1_europe
 p1_newworld
 p1_oceania
+
+```
+
+Start with a fossil fuel phase-out for all regions by 2050. This will require primary energy consumption (PEC) to be supplied by non-GHG producing sources by 2050, sufficient to supply the future energy demands for their populations. So let's consider how each of the SSP populations will influence demands, given average energy demands for X kWh per person per year for each region on average.
+
+```{r, echo = FALSE}
+
+# download.file(url = "https://api.worldbank.org/v2/en/indicator/EG.USE.ELEC.KH.PC?downloadformat=csv", destfile = "/home/thomson/Projects/iep_food/data/energy/world_bank/electric_power_consumption.csv")
+
+wb_epc <- read_csv(file = paste0("/home/thomson/Projects/iep_food/data/energy/world_bank/", "API_EG.USE.ELEC.KH.PC_DS2_en_csv_v2_2256478.csv"), skip = 3)
+
+```
+Per capita electricity consumption in kWh.
+
+```{r}
+
+wb_epc_long <- wb_epc %>% 
+  dplyr::select(`Country Name`, `Country Code`, `2000`:`2014`) %>% 
+  dplyr::rename(iso3 = `Country Code`) %>% 
+  tidyr::drop_na() %>% 
+  tidyr::pivot_longer(., 
+                      cols = `2000`:`2014`, 
+                      names_to = "year", 
+                      values_to = "kWh") %>% 
+  dplyr::mutate(year = as.integer(year))
+
+head(wb_epc_long)
+
+```
+
+Find regional averages.
+
+```{r}
+
+wb_epc_long_regions <- wb_epc_long %>% 
+  dplyr::full_join(country_regions %>% 
+  dplyr::select(-Location), 
+  by = "iso3") %>% 
+  tidyr::drop_na()
+
+head(wb_epc_long_regions)
+
+```
+
+Plot median consumption by region.
+
+```{r}
+
+p2 <- ggplot(wb_epc_long_regions, 
+             aes(x = SubRegName, 
+                 y = kWh*1e-3)) + 
+  geom_boxplot(fill = "purple", 
+               varwidth = FALSE, 
+               outlier.alpha = 0, 
+               alpha = 0.8) 
+
+dat <- ggplot_build(p2)$data[[1]]
+
+p2 + geom_jitter(colour = "darkblue", 
+                 alpha = 0.2, 
+                 size = 0.2) + 
+  geom_segment(data = dat, 
+               aes(x = xmin, 
+                   xend = xmax, 
+                   y = middle, 
+                   yend = middle), 
+               colour = "firebrick", 
+               size= 1.2) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    axis.text.x = element_text(angle = 90, size = 8, vjust = 0.05, hjust = 0.95), 
+    axis.title.x = element_blank()
+  ) + 
+  labs(
+    title = "Per capita energy consumption for all years, 2000-2014", 
+    y = "MWh per capita"
+  )
+
+```
+
+Let's start with a target of 8 MWh per person per year, which is close to the median for Western Europe. Rules are: anyone who is presently above 8 MWh per capita declines to that average by 2050; anyone who is below it is allowed to rise to, but not exceed, that level by 2050. Additional constraint is that countries can only electrify at a maximum rate.
+
+First we need to bring in population numbers.
+
+```{r}
+
+ssp_world_totals <- ssp_world_long %>% 
+  dplyr::group_by(SCENARIO, REGION, year) %>% 
+  dplyr::summarise(population = sum(millions, na.rm = TRUE)*1e6, 
+                   .groups = "drop") %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(scenario = ifelse(
+    SCENARIO == "SSP1_v9_130115", 
+    "SSP1", 
+    ifelse(
+      SCENARIO == "SSP2_v9_130115", 
+      "SSP2", 
+      ifelse(
+        SCENARIO == "SSP3_v9_130115", 
+        "SSP3", 
+        ifelse(
+          SCENARIO == "SSP4d_v9_130115", 
+          "SSP4", 
+          "SSP5"
+        ))))) %>% 
+  dplyr::rename(iso3 = REGION) %>% 
+  dplyr::select(-SCENARIO)
+
+```
+
+The SSP population numbers are given in 5 year intervals, whereas the PEC values are annual. I will reduce the PEC interval to 5 years also, but take the values for each fuel type as the averages of the 3 years centered on 2010 and 2015; i.e., value(2010) = mean(values(2009,2010,2011)) and value(2015) = mean(values(2014,2015,2016)).
+
+```{r}
+pec_countries_reduced <- pec_countries %>% 
+  dplyr::filter(year %in% c(2009,2010,2011,2014,2015,2016)) %>% 
+  dplyr::mutate(bin_year = ifelse(year %in% c(2009, 2010, 2011), 
+                                  2010, 
+                                  2015)) %>% 
+  dplyr::group_by(Location, iso3, SubRegName, bin_year) %>% 
+  dplyr::summarise(
+    biodiesel = mean(biodiesel, na.rm = TRUE), 
+    biomass_waste = mean(biomass_waste, na.rm = TRUE), 
+    coal = mean(coal, na.rm = TRUE), 
+    fuel_ethanol = mean(fuel_ethanol, na.rm = TRUE), 
+    gas = mean(gas, na.rm = TRUE), 
+    geothermal = mean(geothermal, na.rm = TRUE), 
+    hydro = mean(hydro, na.rm = TRUE), 
+    nuclear = mean(nuclear, na.rm = TRUE), 
+    oil = mean(oil, na.rm = TRUE), 
+    peat = mean(peat, na.rm = TRUE), 
+    solar_tidal_wave_fuelcell = mean(solar_tidal_wave_fuelcell, na.rm = TRUE), 
+    wind = mean(wind, na.rm = TRUE), 
+    total = mean(total, na.rm = TRUE), 
+    .groups = "drop"
+    ) %>% 
+  dplyr::rename(year = bin_year)
+
+pec_countries_reduced
+```
+
+
+```{r}
+
+pec_countries_reduced_ssp <- pec_countries_reduced %>% 
+  dplyr::full_join(ssp_world_totals, 
+                   by = c("iso3", "year")) %>% 
+  dplyr::mutate(per_capita_MWh = total/population) %>% 
+  tidyr::drop_na()
+
+head(pec_countries_reduced_ssp)
+
+```
+
+```{r}
+
+p3 <- ggplot(pec_countries_reduced_ssp, 
+             aes(x = SubRegName, 
+                 y = per_capita_MWh)) + 
+  geom_boxplot(fill = "purple", 
+               varwidth = FALSE, 
+               outlier.alpha = 0, 
+               alpha = 0.8) 
+
+dat1 <- ggplot_build(p2)$data[[1]] #median values from World Bank data
+dat2 <- ggplot_build(p3)$data[[1]] #median values from these (TSP & IIASA SSP) data
+
+p3 + geom_jitter(colour = "darkblue", 
+                 alpha = 0.2, 
+                 size = 0.2) + 
+   # geom_segment(data = dat1, 
+   #             aes(x = xmin, 
+   #                 xend = xmax, 
+   #                 y = middle, 
+   #                 yend = middle), 
+   #             colour = "darkblue", 
+   #             size= 1.2) + 
+  geom_segment(data = dat2, 
+               aes(x = xmin, 
+                   xend = xmax, 
+                   y = middle, 
+                   yend = middle), 
+               colour = "firebrick", 
+               size= 1.2) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    axis.text.x = element_text(angle = 90, size = 8, vjust = 0.05, hjust = 0.95), 
+    axis.title.x = element_blank()
+  ) + 
+  labs(
+    title = "Per capita PEC, 2010 & 2015", 
+    y = "MWh per capita"
+  )
+
+```
+
+Phase out all fossil fuels (coal, gas, oil, and peat) by 2050. Make up the difference with "wedges" of net-zero fuel types, to be decided later.
+
+```{r}
+
+pec_netzero_sources <- pec_countries_reduced_ssp %>% 
+  dplyr::mutate(netzero_sources = biodiesel + biomass_waste + fuel_ethanol + geothermal + hydro + nuclear + solar_tidal_wave_fuelcell + wind, 
+                fossil_sources = total - netzero_sources) %>% 
+  dplyr::select(Location, iso3, SubRegName, year, netzero_sources, fossil_sources, total, population, scenario, per_capita_MWh)
+
+head(pec_netzero_sources)
+
+```
+
+Extrapolate values for 2020, based on points for 2010 and 2015. For this, I use `nest()` and `lm()` functions.
+
+```{r}
+
+pec_lm_predictions <- pec_netzero_sources %>% 
+  group_by(Location, iso3, SubRegName) %>% 
+  nest() %>% 
+  dplyr::mutate(fossil_sources_lm = map(data, ~ lm(fossil_sources ~ year, data = .x)), 
+                netzero_sources_lm = map(data, ~ lm(netzero_sources ~ year, data = .x)), 
+                fossil_sources_pred = map(fossil_sources_lm, ~predict(., data.frame(year = 2020))), 
+                netzero_sources_pred = map(netzero_sources_lm, ~predict(., data.frame(year = 2020)))) %>% 
+  unnest(cols = c(netzero_sources_pred, fossil_sources_pred)) %>% 
+  ungroup()
+
+```
+
+In a few cases (e.g., US Virgin Islands, Syria, Trinidad & Tobago) this method breaks, producing negative estimates of net-zero and fossil fuel PEC for 2020. Here, I just zero out these negative numbers. We can return to this later with better country-level data, if necessary.
+
+```{r}
+
+pec_2020 <- pec_lm_predictions %>% 
+  dplyr::mutate(year = 2020, 
+                netzero_sources = ifelse(netzero_sources_pred > 0 & !is.na(netzero_sources_pred), 
+                                         netzero_sources_pred, 
+                                         0), 
+                fossil_sources = ifelse(fossil_sources_pred > 0 & !is.na(fossil_sources_pred), 
+                                         fossil_sources_pred, 
+                                         0), 
+                total = netzero_sources + fossil_sources) %>% 
+  dplyr::select(Location, iso3, SubRegName, year, netzero_sources, fossil_sources, total) 
+
+```
+
+Join the population data frame.
+
+```{r}
+
+pec_pop_ssp_2020 <- pec_2020 %>% 
+  full_join(ssp_world_totals %>% 
+              dplyr::filter(year == 2020), 
+            by = c("iso3", "year")) %>% 
+  dplyr::mutate(per_capita_MWh = total/population) %>% 
+  tidyr::drop_na() %>% 
+  ungroup()
+
+head(pec_pop_ssp_2020)
+
+```
+
+
+
+Create a data frame for countries and regions for years between 2020 and 2050.
+
+```{r}
+
+dimension <- pec_netzero_sources %>% 
+  dplyr::distinct(Location, iso3, SubRegName, scenario) %>% 
+  dim()
+len <- dimension[1]/5 #the number of countries
+
+tmp <- pec_netzero_sources %>% 
+  dplyr::distinct(Location, iso3, SubRegName, scenario)
+
+pec_netzero_2025_2050 <- data.frame(
+  Location = rep(tmp$Location, 6), 
+  iso3 = rep(tmp$iso3, 6), 
+  SubRegName = rep(tmp$SubRegName, 6), 
+  year = rep(seq(2025, 2050, by = 5), len), 
+  netzero_sources = NA, 
+  fossil_sources = NA, 
+  total = NA, 
+  scenario = rep(tmp$scenario, 6)
+)
+
+head(pec_netzero_2025_2050)
+
+```
+
+
+For target year 2050, I set regional target per capita PEC values, and pass these to the 
+
+```{r}
+
+regional_maxima <- data.frame(
+  SubRegName = c("Southern Asia", "Southern Europe", "Northern Africa", "Middle Africa", "South America", "Western Asia", "Caribbean", "Australia/New Zealand", "Western Europe", "Eastern Europe", "Central America", "Western Africa", "Southern Africa", "South-Eastern Asia", "Eastern Africa", "Northern America", "Eastern Asia", "Northern Europe", "Melanesia", "Polynesia", "Micronesia", "Central Asia"), 
+  target_value = c(5, 7, 4, 4, 4, 5, 5, 8, 8, 6, 4, 4, 4, 5, 4, 10, 8, 9, 4, 4, 6, 5)
+)
+
+head(regional_maxima)
+
+```
+
+
+```{r}
+
+pec_pop_ssp_2025_2050 <- pec_netzero_2025_2050 %>% 
+  dplyr::full_join(regional_maxima, 
+                   by = "SubRegName") %>% 
+  dplyr::rename(per_capita_MWh = target_value)
+
+head(pec_pop_ssp_2025_2050)
+
+```
+
+
+
+```{r}
+
+ssp_world_totals_2050 <- ssp_world_totals %>% 
+  dplyr::filter(year == 2050) %>% 
+  dplyr::full_join(pec_pop_ssp_2025_2050, 
+                   by = c("iso3", "year", "scenario")) %>% 
+  dplyr::select(Location, iso3, SubRegName, year, netzero_sources, fossil_sources, total, population, scenario, per_capita_MWh) %>% 
+  dplyr::mutate(total = population*per_capita_MWh, 
+                fossil_sources = 0, 
+                netzero_sources = total - fossil_sources) %>% 
+  tidyr::drop_na()
+
+head(ssp_world_totals_2050)
+
+```
+
+
+```{r}
+
+years_interp = data.frame(year = seq(2020, 2050, by = 5))
+
+pec_2020_2050 <- pec_pop_ssp_2020 %>% 
+  dplyr::bind_rows(ssp_world_totals_2050) %>% 
+  dplyr::select(Location, iso3, SubRegName, year, netzero_sources, fossil_sources, scenario) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::group_by(Location, iso3, SubRegName, scenario) %>% 
+  tidyr::nest() %>% 
+  dplyr::mutate(fossil_sources_lm = map(data, ~ lm(fossil_sources ~ year, data = .x)), 
+                netzero_sources_lm = map(data, ~ lm(netzero_sources ~ year, data = .x)), 
+                fossil_sources_pred = map(fossil_sources_lm, ~predict(., years_interp)), 
+                netzero_sources_pred = map(netzero_sources_lm, ~predict(., years_interp))) %>% 
+  unnest(cols = c(netzero_sources_pred, fossil_sources_pred)) %>% 
+  ungroup()
+
+head(pec_2020_2050)
+
+```
+
+Add years back into this.
+
+```{r}
+
+dimension <- pec_2020_2050 %>%
+  distinct(iso3) %>% 
+  dim()
+
+len <- dimension[1] #number of countries
+scen <- 5 #number of scenarios
+
+yr <- data.frame(
+  year = rep(rep(seq(2020, 2050, by = 5), scen), len)
+)
+
+pec_ssp_2020_2050 <- pec_2020_2050 %>% 
+  dplyr::bind_cols(yr) %>% 
+  dplyr::mutate(netzero_sources = netzero_sources_pred, 
+                fossil_sources = fossil_sources_pred, 
+                total = netzero_sources, fossil_sources) %>% 
+  dplyr::select(Location, iso3, SubRegName, year, netzero_sources, fossil_sources, total, scenario)
+
+head(pec_ssp_2020_2050)
+
+```
+Join population data frame.
+
+```{r}
+
+pec_pop_ssp_2020_2050 <- pec_ssp_2020_2050 %>% 
+  dplyr::full_join(ssp_world_totals, 
+                   by = c("iso3", "year", "scenario")) %>% 
+  dplyr::mutate(per_capita_MWh = total/population) %>% 
+  dplyr::select(Location, iso3, SubRegName, year, netzero_sources, fossil_sources, total, population, scenario, per_capita_MWh) %>% 
+  dplyr::filter(year <= 2050) %>% 
+  tidyr::drop_na()
+
+head(pec_pop_ssp_2020_2050)
+
+```
+
+Bind all of the PEC data frames.
+
+```{r}
+
+pec_lm <- pec_netzero_sources %>% 
+  dplyr::bind_rows(pec_pop_ssp_2020) %>% 
+  dplyr::bind_rows(pec_pop_ssp_2020_2050) %>% 
+  dplyr::bind_rows(
+    ssp_world_totals_2050 %>% 
+      dplyr::filter(year == 2050)
+  ) %>% 
+  tidyr::drop_na()
+
+```
+
+
+Aggregate into regions. (Problem looks to be here, as if it's aggregatign too many energy numbers and too few pop numbers.)
+
+```{r}
+
+pec_lm_regions <- pec_lm %>% 
+  dplyr::group_by(SubRegName, year, scenario) %>% 
+  dplyr::summarise(netzero_sources = sum(netzero_sources, 
+                                         na.rm = TRUE), 
+                   fossil_sources = sum(fossil_sources, 
+                                        na.rm = TRUE), 
+                   total = sum(total, 
+                               na.rm = TRUE), 
+                   population = sum(population, 
+                                    na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  ungroup() %>% 
+  dplyr::mutate(per_capita_MWh = total/population)
+
+head(pec_lm_regions)
+
+```
+
+
+```{r}
+
+pec_lm_diff <- pec_lm_regions %>% 
+  dplyr::mutate(tmp_netzero = ifelse(year == 2010, 
+                                     netzero_sources, 
+                                     NA), 
+                tmp_fossil = ifelse(year == 2010, 
+                                    fossil_sources, 
+                                    NA)) %>% 
+  dplyr::group_by(SubRegName, scenario) %>% 
+  tidyr::fill(tmp_netzero, tmp_fossil) %>% 
+  ungroup() %>% 
+  dplyr::mutate(netzero_diff = netzero_sources-tmp_netzero, 
+                fossil_diff = fossil_sources-tmp_fossil) %>% 
+  dplyr::select(SubRegName, year, netzero_diff, fossil_diff, scenario)
+
+head(pec_lm_diff)
+
+```
+
+
+
+
+```{r}
+
+p4_asia <- ggplot(data = pec_lm_relative %>% 
+         dplyr::filter(year == 2050 & SubRegName %in% c("Central Asia", "Eastern Asia", "South-Eastern Asia", "Southern Asia", "Western Asia")), 
+       aes(x = as.factor(year), 
+           y = netzero_diff*1e-6)) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  facet_wrap(~SubRegName, 
+             scales = "free_y") + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_blank(), 
+    axis.title.x = element_blank(), 
+    axis.text.y = element_text(size = 6), 
+  ) + 
+  labs(
+    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    y = "Exajoules"
+  ) + 
+  panel_border() 
+
+p4_africa <- ggplot(data = pec_lm_relative %>% 
+         dplyr::filter(year == 2050 & SubRegName %in% c("Eastern Africa", "Middle Africa", "Northern Africa", "Southern Africa", "Western Africa")), 
+       aes(x = as.factor(year), 
+           y = netzero_diff*1e-6)) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  facet_wrap(~SubRegName, 
+             scales = "free_y") + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_blank(), 
+    axis.title.x = element_blank(), 
+    axis.text.y = element_text(size = 6), 
+  ) + 
+  labs(
+    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    y = "Exajoules"
+  ) + 
+  panel_border() 
+
+p4_europe <- ggplot(data = pec_lm_relative %>% 
+         dplyr::filter(year == 2050 & SubRegName %in% c("Eastern Europe", "Northern Europe", "Southern Europe", "Western Europe")), 
+       aes(x = as.factor(year), 
+           y = netzero_diff*1e-6)) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  facet_wrap(~SubRegName, 
+             scales = "free_y") + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_blank(), 
+    axis.title.x = element_blank(), 
+    axis.text.y = element_text(size = 6), 
+  ) + 
+  labs(
+    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    y = "Exajoules"
+  ) + 
+  panel_border() 
+
+p4_newworld <- ggplot(data = pec_lm_relative %>% 
+         dplyr::filter(year == 2050 & SubRegName %in% c("Caribbean", "Northern America", "South America")), 
+       aes(x = as.factor(year), 
+           y = netzero_diff*1e-6)) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  facet_wrap(~SubRegName, 
+             scales = "free_y") + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_blank(), 
+    axis.title.x = element_blank(), 
+    axis.text.y = element_text(size = 6), 
+  ) + 
+  labs(
+    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    y = "Exajoules"
+  ) + 
+  panel_border() 
+
+p4_oceania <- ggplot(data = pec_lm_relative %>% 
+         dplyr::filter(year == 2050 & SubRegName %in% c("Australia/New Zealand", "Melanesia", "Micronesia", "Polynesia")), 
+       aes(x = as.factor(year), 
+           y = netzero_diff*1e-6)) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) + 
+  facet_wrap(~SubRegName, 
+             scales = "free_y") + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "bottom", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_blank(), 
+    axis.title.x = element_blank(), 
+    axis.text.y = element_text(size = 6), 
+  ) + 
+  labs(
+    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    y = "Exajoules above 2010 demand"
+  ) + 
+  panel_border() 
+
+p4_asia
+p4_africa
+p4_europe
+p4_newworld
+p4_oceania
 
 ```
 
