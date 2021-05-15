@@ -1001,3 +1001,117 @@ p4_oceania
 
 ```
 
+Next, I must determine how much of this new demand can be met by wind and solar; and if there is a deficit, how much this will be.
+
+### Wind 
+
+What is the maximum available supply of wind energy?
+
+```{r, echo=FALSE}
+
+library(raster)
+
+iso3_codes_list <- ssp_world_totals %>% 
+  dplyr::distinct(iso3) %>%
+  dplyr::pull(iso3)
+
+```
+
+
+This code simply extracts wind power density values (W/m^2) from whole countries. In the future, I will use urban and/or population density data to create buffers to tap power supply from only those areas sufficiently close to populations.
+```{r}
+
+wind_coun_path <- "/home/thomson/Projects/iep_food/data/energy/wind_atlas/countries"
+
+for(iso3 in iso3_codes_list){
+
+  file_name <- paste0(iso3, 
+                      ".tif")
+  
+  wind <- dir(wind_coun_path, 
+              full.names = TRUE)[grep(file_name, 
+                                      dir(wind_coun_path))] 
+  if(length(wind) != 0) {
+     #raster values are mean power density (W/m^2) at 50 m height
+  wind_ras <- raster(wind) 
+  
+  #summed values are mean annual energy supply (MJ)
+  #mean power (W, or J/s) multiplied by 3.154e7 seconds/year multiplied by 1e-6 MJ/J.
+  wind_sum_power_density <- wind_ras %>% 
+    raster::values() %>% 
+    sum(., na.rm = TRUE)*3.154e7*1e-6
+  } else {
+    wind_sum_power_density <- NA
+  }
+  
+  tmp <- data.frame(
+    iso3 = iso3, 
+    MJ = wind_sum_power_density
+  )
+  
+  if(iso3 == min(iso3_codes_list)){ 
+    wind_power <- tmp
+  } else {
+    wind_power <- rbind(
+      wind_power, 
+      tmp
+    )
+    rm(tmp)
+  }
+}
+
+wind_power <- tibble(wind_power)
+
+```
+
+```{r}
+
+# write_csv(wind_power, file = "~/Data/IEP_Model/data_iep_model/wind_power.csv")
+
+```
+
+
+
+### Solar 
+
+Here I use data provided by the Solar Atlas and World Bank termed "practical" photovoltaic power potential.
+
+From data in: [Suri,Marcel; Betak,Juraj; Rosina,Konstantin; Chrkavy,Daniel; Suriova,Nada; Cebecauer,Tomas; Caltik,Marek; Erdelyi,Branislav. 2020. Global Photovoltaic Power Potential by Country (English). Energy Sector Management Assistance Program (ESMAP) Washington, D.C. : World Bank Group.](http://documents.worldbank.org/curated/en/466331592817725242/Global-Photovoltaic-Power-Potential-by-Country)
+
+What is the maximum available supply of solar energy?
+
+```{r, echo=FALSE}
+
+solar_potential <- read_csv(file = "~/Data/IEP_Model/data_iep_model/SolarGIS solar potential data - harmonized summary.csv", skip = 1)
+
+
+```
+
+The column labelled "Median" is the median theoretical potential (GHI) measured in kWh/m^2/day long-term. The column labelled "Median_1" is the median practical potential (PVOUT) for Level 1, measured in kWh/kWp/day long-term. Until I better understand how to use the PVOUT numbers, I will use the GHI numbers here.
+
+```{r}
+practical_solar_potential <- solar_potential %>%
+  dplyr::rename(
+    "iso3" = "ISO_A3",
+    "country" = "Country or region",
+    "evaluated_area_km2" = "Evaluated area",
+    "level_1_area_ratio" = "Level 1 area \n(% of evaluated area)",
+    "minimum_pvout" = "Minimum",
+    "x10th_percentile_pvout" = "10th percentile",
+    "x25th_percentile_pvout" = "25th Percentile",
+    "mean_pvout" = "Average",
+    "median_pvout" = "Median",
+    "x75th_percentile_pvout" = "75th Percentile",
+    "x90th_percentile_pvout" = "90th percentile",
+    "maximum_pvout" = "Maximum"
+  ) %>% 
+  dplyr::select(iso3, country, evaluated_area_km2, level_1_area_ratio, minimum_pvout, x10th_percentile_pvout, x25th_percentile_pvout, minimum_pvout, median_pvout, x75th_percentile_pvout, x90th_percentile_pvout, maximum_pvout) %>% 
+  dplyr::mutate(
+    practical_pvout_MJ = evaluated_area_km2*level_1_area_ratio*median_pvout*(1e6)*365*3.6e6, 
+    practical_pvout_EJ = practical_pvout_MJ*1e-12
+  )
+
+practical_solar_potential
+
+```
+
