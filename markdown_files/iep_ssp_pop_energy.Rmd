@@ -526,6 +526,12 @@ ssp_world_totals <- ssp_world_long %>%
 
 ```
 
+
+```{r}
+# write_csv(ssp_world_totals, file = "~/Projects/ssp_pop/data/ssp_world_totals.csv")
+```
+
+
 The SSP population numbers are given in 5 year intervals, whereas the PEC values are annual. I will reduce the PEC interval to 5 years also, but take the values for each fuel type as the averages of the 3 years centered on 2010 and 2015; i.e., value(2010) = mean(values(2009,2010,2011)) and value(2015) = mean(values(2014,2015,2016)).
 
 ```{r}
@@ -867,210 +873,238 @@ pec_lm_diff <- pec_lm_regions %>%
 head(pec_lm_diff)
 
 ```
+There's a conversion error somewhere. At present, total global PEC is 576 EJ.
 
-
-
+Maybe it's this: 1 MWh = 3.6e-9 EJ.
 
 ```{r}
 
 p4_asia <- ggplot(data = pec_lm_relative %>% 
          dplyr::filter(year == 2050 & SubRegName %in% c("Central Asia", "Eastern Asia", "South-Eastern Asia", "Southern Asia", "Western Asia")), 
        aes(x = as.factor(year), 
-           y = netzero_diff*1e-6)) + 
+           y = netzero_diff*(3.6e-9))) + 
   geom_col(aes(fill = scenario), 
            position = "dodge", 
            alpha = 0.8) + 
   facet_wrap(~SubRegName, 
-             scales = "free_y") + 
+             scale = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
-    legend.position = "bottom", 
+    legend.position = "none", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_blank(), 
-    axis.title.x = element_blank(), 
+    axis.title.x = element_blank(),
     axis.text.y = element_text(size = 6), 
+    axis.title.y = element_text(size = 8), 
+    plot.tag = element_text(size = 10)
   ) + 
   labs(
-    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
-    y = "Exajoules"
+    # title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    tag = "Asia", 
+    y = "EJ"
   ) + 
   panel_border() 
 
 p4_africa <- ggplot(data = pec_lm_relative %>% 
          dplyr::filter(year == 2050 & SubRegName %in% c("Eastern Africa", "Middle Africa", "Northern Africa", "Southern Africa", "Western Africa")), 
        aes(x = as.factor(year), 
-           y = netzero_diff*1e-6)) + 
+           y = netzero_diff*(3.6e-9))) + 
   geom_col(aes(fill = scenario), 
            position = "dodge", 
            alpha = 0.8) + 
   facet_wrap(~SubRegName, 
-             scales = "free_y") + 
+             scale = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
-    legend.position = "bottom", 
+    legend.position = "none", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_blank(), 
-    axis.title.x = element_blank(), 
+    axis.title.x = element_blank(),
     axis.text.y = element_text(size = 6), 
+    axis.title.y = element_text(size = 8), 
+    plot.tag = element_text(size = 10)
   ) + 
   labs(
-    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
-    y = "Exajoules"
+    # title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    tag = "Africa", 
+    y = "EJ"
   ) + 
   panel_border() 
 
 p4_europe <- ggplot(data = pec_lm_relative %>% 
          dplyr::filter(year == 2050 & SubRegName %in% c("Eastern Europe", "Northern Europe", "Southern Europe", "Western Europe")), 
        aes(x = as.factor(year), 
-           y = netzero_diff*1e-6)) + 
+           y = netzero_diff*(3.6e-9))) + 
   geom_col(aes(fill = scenario), 
            position = "dodge", 
            alpha = 0.8) + 
   facet_wrap(~SubRegName, 
-             scales = "free_y") + 
+             scale = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
-    legend.position = "bottom", 
+    legend.position = "none", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_blank(), 
-    axis.title.x = element_blank(), 
+    axis.title.x = element_blank(),
     axis.text.y = element_text(size = 6), 
+    axis.title.y = element_text(size = 8), 
+    plot.tag = element_text(size = 10)
   ) + 
   labs(
-    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
-    y = "Exajoules"
+    # title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    tag = "Europe", 
+    y = "EJ"
   ) + 
   panel_border() 
 
 p4_newworld <- ggplot(data = pec_lm_relative %>% 
          dplyr::filter(year == 2050 & SubRegName %in% c("Caribbean", "Northern America", "South America")), 
        aes(x = as.factor(year), 
-           y = netzero_diff*1e-6)) + 
+           y = netzero_diff*(3.6e-9))) + 
   geom_col(aes(fill = scenario), 
            position = "dodge", 
            alpha = 0.8) + 
   facet_wrap(~SubRegName, 
-             scales = "free_y") + 
+             scale = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
-    legend.position = "bottom", 
+    legend.position = "none", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_blank(), 
-    axis.title.x = element_blank(), 
+    axis.title.x = element_blank(),
     axis.text.y = element_text(size = 6), 
+    axis.title.y = element_text(size = 8), 
+    plot.tag = element_text(size = 10)
   ) + 
   labs(
-    title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
-    y = "Exajoules"
+    # title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    tag = "New World", 
+    y = "EJ"
   ) + 
   panel_border() 
 
 p4_oceania <- ggplot(data = pec_lm_relative %>% 
          dplyr::filter(year == 2050 & SubRegName %in% c("Australia/New Zealand", "Melanesia", "Micronesia", "Polynesia")), 
        aes(x = as.factor(year), 
-           y = netzero_diff*1e-6)) + 
+           y = netzero_diff*(3.6e-9))) + 
   geom_col(aes(fill = scenario), 
            position = "dodge", 
            alpha = 0.8) + 
   facet_wrap(~SubRegName, 
-             scales = "free_y") + 
+             scale = "free_y") + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    legend.position = "none", 
+    legend.title = element_blank(), 
+    strip.text.x = element_text(size = 8), 
+    axis.text.x = element_blank(), 
+    axis.title.x = element_blank(),
+    axis.text.y = element_text(size = 6), 
+    axis.title.y = element_text(size = 8), 
+    plot.tag = element_text(size = 10)
+  ) + 
+  labs(
+    # title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
+    tag = "Oceania", 
+    y = "EJ"
+  ) + 
+  panel_border() 
+
+```
+
+
+```{r}
+
+for_legend <- ggplot(data = pec_lm_relative %>% 
+         dplyr::filter(year == 2050 & SubRegName %in% c("Australia/New Zealand", "Melanesia", "Micronesia", "Polynesia")), 
+       aes(x = as.factor(year), 
+           y = netzero_diff*(3.6e-9))) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) +
+  theme(
+    legend.direction = "horizontal", 
+    legend.title = element_blank()
+  )
+
+legend <- cowplot::get_legend(for_legend)
+
+p4 <- cowplot::plot_grid(
+  p4_asia, 
+  p4_africa, 
+  p4_europe, 
+  p4_newworld, 
+  p4_oceania, 
+  legend, 
+  ncol = 2
+  )
+
+title <- ggdraw() + draw_label("Absolute growth in zero emissions energy demand by 2050, by SSP", fontface='bold')
+
+plot_grid(title, p4, ncol=1, rel_heights=c(0.1, 1)) # rel_heights values control title margins
+
+
+```
+
+Same for the entire world.
+```{r}
+
+pec_lm_relative_world <- pec_lm_relative %>% 
+  dplyr::group_by(year, scenario) %>% 
+  dplyr::summarise(netzero_diff = sum(netzero_diff, na.rm = TRUE)*(3.6e-9), 
+                   fossil_diff = sum(fossil_diff, na.rm = TRUE)*(3.6e-9), 
+                   .groups = "drop") %>% 
+   dplyr::filter(year %in% c(2025, 2050))
+
+```
+
+
+```{r}
+
+p4_world <- ggplot(data = pec_lm_relative_world, 
+       aes(x = as.factor(year), 
+           y = netzero_diff)) + 
+  geom_col(aes(fill = scenario), 
+           position = "dodge", 
+           alpha = 0.8) + 
   cowplot::theme_minimal_hgrid() + 
   theme(
     legend.position = "bottom", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
-    axis.text.x = element_blank(), 
-    axis.title.x = element_blank(), 
     axis.text.y = element_text(size = 6), 
+    axis.title.y = element_text(size = 8), 
+    plot.tag = element_text(size = 10), 
+    plot.title = element_text(size = 12)
   ) + 
   labs(
     title = "Absolute growth in zero emissions energy demand for 2050 by SSP", 
-    y = "Exajoules above 2010 demand"
+    tag = "World", 
+    x = "year", 
+    y = "EJ"
   ) + 
   panel_border() 
 
-p4_asia
-p4_africa
-p4_europe
-p4_newworld
-p4_oceania
+p4_world
 
 ```
+
+## Supply
 
 Next, I must determine how much of this new demand can be met by wind and solar; and if there is a deficit, how much this will be.
 
 ### Wind 
 
-What is the maximum available supply of wind energy?
-
-```{r, echo=FALSE}
-
-library(raster)
-
-iso3_codes_list <- ssp_world_totals %>% 
-  dplyr::distinct(iso3) %>%
-  dplyr::pull(iso3)
-
-```
-
-
-This code simply extracts wind power density values (W/m^2) from whole countries. In the future, I will use urban and/or population density data to create buffers to tap power supply from only those areas sufficiently close to populations.
-```{r}
-
-wind_coun_path <- "/home/thomson/Projects/iep_food/data/energy/wind_atlas/countries"
-
-for(iso3 in iso3_codes_list){
-
-  file_name <- paste0(iso3, 
-                      ".tif")
-  
-  wind <- dir(wind_coun_path, 
-              full.names = TRUE)[grep(file_name, 
-                                      dir(wind_coun_path))] 
-  if(length(wind) != 0) {
-     #raster values are mean power density (W/m^2) at 50 m height
-  wind_ras <- raster(wind) 
-  
-  #summed values are mean annual energy supply (MJ)
-  #mean power (W, or J/s) multiplied by 3.154e7 seconds/year multiplied by 1e-6 MJ/J.
-  wind_sum_power_density <- wind_ras %>% 
-    raster::values() %>% 
-    sum(., na.rm = TRUE)*3.154e7*1e-6
-  } else {
-    wind_sum_power_density <- NA
-  }
-  
-  tmp <- data.frame(
-    iso3 = iso3, 
-    MJ = wind_sum_power_density
-  )
-  
-  if(iso3 == min(iso3_codes_list)){ 
-    wind_power <- tmp
-  } else {
-    wind_power <- rbind(
-      wind_power, 
-      tmp
-    )
-    rm(tmp)
-  }
-}
-
-wind_power <- tibble(wind_power)
-
-```
+What is the maximum available supply of wind energy? I use the  (The data frame 'wind_power' is calculated in `iep_energy_wind.Rmd`.)
 
 ```{r}
-
-# write_csv(wind_power, file = "~/Data/IEP_Model/data_iep_model/wind_power.csv")
-
+wind_power <- read_csv(file = "~/Data/IEP_Model/data_iep_model/wind_power.csv")
+head(wind_power)
 ```
-
-
 
 ### Solar 
 
@@ -1078,40 +1112,15 @@ Here I use data provided by the Solar Atlas and World Bank termed "practical" ph
 
 From data in: [Suri,Marcel; Betak,Juraj; Rosina,Konstantin; Chrkavy,Daniel; Suriova,Nada; Cebecauer,Tomas; Caltik,Marek; Erdelyi,Branislav. 2020. Global Photovoltaic Power Potential by Country (English). Energy Sector Management Assistance Program (ESMAP) Washington, D.C. : World Bank Group.](http://documents.worldbank.org/curated/en/466331592817725242/Global-Photovoltaic-Power-Potential-by-Country)
 
-What is the maximum available supply of solar energy?
-
-```{r, echo=FALSE}
-
-solar_potential <- read_csv(file = "~/Data/IEP_Model/data_iep_model/SolarGIS solar potential data - harmonized summary.csv", skip = 1)
-
-
-```
-
-The column labelled "Median" is the median theoretical potential (GHI) measured in kWh/m^2/day long-term. The column labelled "Median_1" is the median practical potential (PVOUT) for Level 1, measured in kWh/kWp/day long-term. Until I better understand how to use the PVOUT numbers, I will use the GHI numbers here.
+What is the maximum available supply of solar energy? (I calculate 'pvout' in `iep_energy_solar.Rmd`.)
 
 ```{r}
-practical_solar_potential <- solar_potential %>%
-  dplyr::rename(
-    "iso3" = "ISO_A3",
-    "country" = "Country or region",
-    "evaluated_area_km2" = "Evaluated area",
-    "level_1_area_ratio" = "Level 1 area \n(% of evaluated area)",
-    "minimum_pvout" = "Minimum",
-    "x10th_percentile_pvout" = "10th percentile",
-    "x25th_percentile_pvout" = "25th Percentile",
-    "mean_pvout" = "Average",
-    "median_pvout" = "Median",
-    "x75th_percentile_pvout" = "75th Percentile",
-    "x90th_percentile_pvout" = "90th percentile",
-    "maximum_pvout" = "Maximum"
-  ) %>% 
-  dplyr::select(iso3, country, evaluated_area_km2, level_1_area_ratio, minimum_pvout, x10th_percentile_pvout, x25th_percentile_pvout, minimum_pvout, median_pvout, x75th_percentile_pvout, x90th_percentile_pvout, maximum_pvout) %>% 
-  dplyr::mutate(
-    practical_pvout_MJ = evaluated_area_km2*level_1_area_ratio*median_pvout*(1e6)*365*3.6e6, 
-    practical_pvout_EJ = practical_pvout_MJ*1e-12
-  )
-
-practical_solar_potential
-
+pvout <- read_csv(file = "~/Data/IEP_Model/data_iep_model/practical_solar_potential.csv")
+head(pvout)
 ```
 
+Photovoltaic potential energy is vastly greater than demand in all countries inspected.
+
+### Geothermal
+
+emissions: 91 g CO2/kWh in Bloomfield, K.K., Moore, J.N. and Neilson, R.N., 2003. Geothermal energy reduces greenhouse gases. Geothermal Resources Council Bulletin, 32(2), pp.77-79.
