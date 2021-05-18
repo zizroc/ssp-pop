@@ -1,0 +1,79 @@
+---
+title: "Practical wind energy potential"
+author: "Marcus J Thomson"
+date: "5/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(raster)
+library(tidyverse)
+```
+
+
+```{r}
+ssp_world_totals <- read_csv(file = "~/Projects/ssp_pop/data/ssp_world_totals.csv")
+```
+
+
+```{r, echo=FALSE}
+
+iso3_codes_list <- ssp_world_totals %>% 
+  dplyr::distinct(iso3) %>%
+  dplyr::pull(iso3)
+
+```
+
+
+This code simply extracts wind power density values (W/m^2) from whole countries. In the future, I will use urban and/or population density data to create buffers to tap power supply from only those areas sufficiently close to populations.
+```{r}
+
+wind_coun_path <- "/home/thomson/Projects/iep_food/data/energy/wind_atlas/countries"
+
+for(iso3 in iso3_codes_list){
+
+  file_name <- paste0(iso3, 
+                      ".tif")
+  
+  wind <- dir(wind_coun_path, 
+              full.names = TRUE)[grep(file_name, 
+                                      dir(wind_coun_path))] 
+  if(length(wind) != 0) {
+     #raster values are mean power density (W/m^2) at 50 m height
+  wind_ras <- raster(wind) 
+  
+  #summed values are mean annual energy supply (MJ)
+  #mean power (W, or J/s) multiplied by 3.154e7 seconds/year multiplied by 1e-6 MJ/J.
+  wind_sum_power_density <- wind_ras %>% 
+    raster::values() %>% 
+    sum(., na.rm = TRUE)*3.154e7*1e-6
+  } else {
+    wind_sum_power_density <- NA
+  }
+  
+  tmp <- data.frame(
+    iso3 = iso3, 
+    MJ = wind_sum_power_density
+  )
+  
+  if(iso3 == min(iso3_codes_list)){ 
+    wind_power <- tmp
+  } else {
+    wind_power <- rbind(
+      wind_power, 
+      tmp
+    )
+    rm(tmp)
+  }
+}
+
+wind_power <- tibble(wind_power)
+
+```
+
+```{r}
+
+# write_csv(wind_power, file = "~/Data/IEP_Model/data_iep_model/wind_power.csv")
+
+```

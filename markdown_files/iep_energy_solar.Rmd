@@ -1,0 +1,66 @@
+---
+title: "Solar energy supply"
+author: "Marcus J Thomson"
+date: "5/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Solar 
+
+Here I use data provided by the Solar Atlas and World Bank termed "practical" photovoltaic power potential.
+
+From data in: [Suri,Marcel; Betak,Juraj; Rosina,Konstantin; Chrkavy,Daniel; Suriova,Nada; Cebecauer,Tomas; Caltik,Marek; Erdelyi,Branislav. 2020. Global Photovoltaic Power Potential by Country (English). Energy Sector Management Assistance Program (ESMAP) Washington, D.C. : World Bank Group.](http://documents.worldbank.org/curated/en/466331592817725242/Global-Photovoltaic-Power-Potential-by-Country)
+
+What is the maximum available supply of solar energy?
+
+```{r, echo=FALSE}
+
+solar_potential_data <- read_csv(file = "~/Data/IEP_Model/data_iep_model/SolarGIS solar potential data - harmonized summary.csv", skip = 1)
+
+```
+
+The column labelled "Median" is the median theoretical potential (GHI) measured in kWh/m^2/day long-term. The column labelled "Median_1" is the median practical potential (PVOUT) for Level 1, measured in kWh/kWp/day long-term.
+
+```{r}
+practical_solar_potential <- solar_potential_data %>%
+  dplyr::rename(
+    "iso3" = "ISO_A3",
+    "country" = "Country or region",
+    "evaluated_area_km2" = "Evaluated area",
+    "level_1_area_ratio" = "Level 1 area \n(% of evaluated area)",
+    "minimum_pvout" = "Minimum_1",
+    "x10th_percentile_pvout" = "10th percentile_1",
+    "x25th_percentile_pvout" = "25th Percentile_1",
+    "mean_pvout" = "Average_1",
+    "median_pvout" = "Median_1",
+    "x75th_percentile_pvout" = "75th Percentile_1",
+    "x90th_percentile_pvout" = "90th percentile_1",
+    "maximum_pvout" = "Maximum_1"
+  ) %>% 
+  dplyr::select(iso3, country, evaluated_area_km2, level_1_area_ratio, minimum_pvout, x10th_percentile_pvout, x25th_percentile_pvout, minimum_pvout, mean_pvout, median_pvout, x75th_percentile_pvout, x90th_percentile_pvout, maximum_pvout) %>% 
+  dplyr::mutate(
+    practical_pvout_MJ = evaluated_area_km2*level_1_area_ratio*mean_pvout*(1e6)*365*3.6, 
+    practical_pvout_EJ = practical_pvout_MJ*1e-12
+  )
+
+head(practical_solar_potential)
+
+```
+
+```{r}
+# write_csv(practical_solar_potential, file = "~/Data/IEP_Model/data_iep_model/practical_solar_potential.csv")
+```
+
+## Capacity
+
+The real issue with solar potential is how rapidly solar collectors, such as photovoltaic power stations, can be distributed at scale. I need to estimate this.
+
+```{r}
+
+```
+
