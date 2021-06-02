@@ -1,0 +1,1831 @@
+---
+title: "EAT-Lancet Planetary Health diet demand"
+author: "Marcus J Thomson"
+date: "5/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+```
+
+## Introduction
+
+In this document, I compute the (healthy) metabolic food energy requirement (in kcal/day) for the global population from the present to 2100 based on five shared socioeconomic pathways (SSPs). Assuming that level of education, as given in the SSP data, is a good proxy for level of activity required in a healthy diet (with the poorly educated being more likely to do manual labour and therefore requiring relatively greater dietary energy), I show that estimates based on uniformly "moderate" activity level under-estimates the necessary kcal quantity in the near term for all SSPs, and over-estimates it in the long term for SSP1, 2, and 4. For SSP3 and 5, the uniformly "moderate" assumption under-estimates over the entire time-series.
+
+## Load data
+
+### Population data
+
+Read in population data from the SSP database at IIASA. Reference: [Keywan Riahi, et al. (2017). The Shared Socioeconomic Pathways and their energy, land use, and greenhouse gas emissions implications: An overview, Global Environmental Change, Volume 42, Pages 153-168, ISSN 0959-3780, DOI:110.1016/j.gloenvcha.2016.05.009](https://secure.iiasa.ac.at/web-apps/ene/SspDb/dsd?Action=htmlpage&page=10)
+
+```{r}
+ssp_path <- "/home/thomson/Data/SSPs/"
+
+ssp_base <- read.csv(file = paste0(ssp_path, 
+                                   "SspDb_country_data_2013-06-12.csv"), 
+                     header = TRUE, 
+                     stringsAsFactors = FALSE)
+```
+
+## Total female and male numbers by age bracket
+
+At this stage, I am only interested in pulling the data for total female and male populations in each age bracket. Later, I include education level.
+
+```{r, echo=FALSE}
+
+for(i in seq(0, 100, by = 5)){
+  tmp1 <- paste0("Population|Female|Aged", i, "-", i+4)
+  tmp2 <- paste0("Population|Male|Aged", i, "-", i+4)
+  
+  #unless age bracket is 100+
+  if(i==100){
+    tmp1 <- "Population|Female|Aged100+"
+    tmp2 <- "Population|Male|Aged100+"
+  }
+  
+  if(i==0){ 
+    female_pop <- tmp1
+    male_pop   <- tmp2
+  }
+  if(i >0){
+    female_pop <- c(female_pop, tmp1)
+    male_pop   <- c(male_pop, tmp2)
+  }
+}
+
+#map values of age class string onto numerical values of age brackets
+
+age_map <- rbind(tibble(VARIABLE = female_pop, 
+                        gender = "female", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                 tibble(VARIABLE = male_pop, 
+                        gender = "male", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)))
+
+ssp_world <- ssp_base %>% 
+  # filter(REGION == "USA") %>%  
+  filter(VARIABLE %in% female_pop | 
+         VARIABLE %in% male_pop) %>% 
+  left_join(., age_map, by = "VARIABLE") %>% 
+  # filter(SCENARIO == "SSP2_v9_130115") %>% 
+  arrange(min_age)
+
+ssp_world_long <- ssp_world %>% 
+  dplyr::select(-VARIABLE, -UNIT) %>% 
+  pivot_longer(cols = starts_with("X"), 
+               names_to = "year", 
+               names_prefix = "X", 
+               values_to = "millions") %>% 
+  mutate(year = as.numeric(year)) %>% 
+  na.omit()
+
+```
+
+### Plot the results
+
+```{r}
+
+ggplot(data = ssp_world_long %>% 
+         group_by(year, SCENARIO, gender) %>% 
+         summarize(pop_tot = sum(millions), .groups = "drop"), 
+       aes(x = year, y = pop_tot)) + 
+  geom_area(aes(fill = gender), 
+            alpha = 0.7) + 
+  labs(
+    title = "World population by SSP", 
+    subtitle = "Data: IIASA SSP database", 
+    x = "Year", 
+    y = "Million persons"
+  ) + 
+  theme_minimal() + 
+  theme(
+    legend.position = "top", 
+    axis.text.x = element_text(angle = 90)
+  ) + 
+  facet_wrap(~SCENARIO, 
+             nrow = 1, 
+             labeller = as_labeller(
+               c("SSP1_v9_130115" = "SSP1", 
+                 "SSP2_v9_130115" = "SSP2",
+                 "SSP3_v9_130115" = "SSP3",
+                 "SSP4d_v9_130115"= "SSP4",
+                 "SSP5_v9_130115" = "SSP5")))
+
+# output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
+
+# if(!exists(ssp_world_long)) {
+#   save(ssp_world_long, file = paste0(output_path, "ssp_world_long.Rdata"))
+# }
+
+```
+
+
+```{r}
+
+output_path <- "/home/thomson/Projects/iep_food/IEP_food_demand_files/"
+
+
+load(file = paste0(output_path, "ssp_world_long.Rdata"))
+
+
+```
+
+## Daily energy requirements
+
+Read in the daily energy requirements for humans from the FAO: [Joint, F.A.O. (2004). Human energy requirements. Report of a Joint FAO/WHO/UNU Expert Consultation, Rome, 17-24 October 2001.](http://www.fao.org/3/y5686e/y5686e00.htm).
+
+```{r, echo=FALSE}
+
+data_path <- "/home/thomson/Projects/iep_food/data/"
+
+der_child <- read.csv(paste0(data_path, 
+                             "FAO_Human_Daily_Energy_Children.csv"), 
+                      stringsAsFactors = FALSE)
+
+der_adult <- read.csv(paste0(data_path, 
+                             "FAO_Human_Daily_Energy_Adults.csv"), 
+                      stringsAsFactors = FALSE)
+
+```
+
+These data contain daily energy requirements (MJ/day and kcal/day) for children (ages ) and adults (ages ) by age range, gender, body mass, and activity level. For adults, there are: three age ranges (i.e., 18-29.9, 30-59.9, and 60 plus years); ten different body mass groups (i.e., 45 to 90 kg in 5 kg increments); and six different activity levels (i.e., 1.45, 1.60, 1.75, 1.90, 2.05, and 2.20 times BMR). For children, there are: seventeen age ranges (i.e., 1-2 to 17-18 by yearly increments); three activity level groups (i.e., "light", "moderate", and "heavy"); and thirty-four body mass groups (i.e., 17 for females from 10.8 to 56.7 kg, and 17 for males from 11.5 to 67.8 kg).
+
+Before joining to the SSP data, the DER data will need to be aggregated: the `der_child` data set will be expanded to generate rows for each distinct age, gender, and activity level group; and the expanded `der_child` and `der_adult` data sets will need to be harmonized.
+
+NB: I use `drop_na` here because light and heavy kcal values are not given for children under 6 yrs old. In such a case, moderate values are passed.
+
+```{r}
+
+av_der_child <- der_child %>% 
+  tidyr::drop_na() %>% 
+  dplyr::select(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Body_mass_kg, 
+    Activity_level, 
+    Daily_energy_req_kilocal_per_day) %>% 
+  dplyr::group_by(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Activity_level) %>% 
+  dplyr::summarise(
+    av_body_mass = mean(Body_mass_kg, 
+                        na.rm = TRUE), 
+    av_kcalPerDay = mean(Daily_energy_req_kilocal_per_day, 
+                         na.rm = TRUE), 
+    .groups = "drop") %>% 
+  dplyr::ungroup()
+
+av_der_child
+
+```
+
+Aggregate `der_adult` into three activity level categories, with 1.45 and 1.60 times BMR coded as "light", 1.75 and 1.90 times as "moderate", and 2.05 and 2.20 times as "heavy"; and average DER by age, gender and activity level groups.
+
+```{r}
+
+av_der_adult <- der_adult %>% 
+  dplyr::select(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Body_mass_kg, 
+    Activity_level, 
+    Daily_energy_req_kilocal_per_day) %>%  
+  dplyr::group_by(
+    Age_min, 
+    Age_max, 
+    Gender, 
+    Activity_level) %>% 
+  dplyr::summarise(
+    av_body_mass = mean(Body_mass_kg, 
+                        na.rm = TRUE), 
+    av_kcalPerDay = mean(Daily_energy_req_kilocal_per_day, 
+                         na.rm = TRUE), 
+    .groups = "drop") %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(
+    Activity_level = ifelse(Activity_level %in% c("1.45 × BMR", "1.60 × BMR"),  
+                                 "light", 
+                                 ifelse(Activity_level %in% c("1.75 × BMR", "1.90 × BMR"), 
+                                        "moderate", 
+                                        ifelse(Activity_level %in% c("2.05 × BMR", "2.20 × BMR"), 
+                                               "heavy", 
+                                               NA))))
+
+
+head(av_der_adult)
+
+```
+
+Make a data frame with a row for each distinct year, gender, activity level group, then bin these into Age_min and Age_max columns as are used in the `av_der_child` and `av_der_adult` data sets. 
+
+```{r}
+
+expanded_ages <- rbind(
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("female", 618), 
+    Activity_level = "light"), 
+  data.frame(min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("female", 618), 
+    Activity_level = "moderate"), 
+    data.frame(min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("female", 618), 
+    Activity_level = "heavy"), 
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("male", 618), 
+    Activity_level = "light"), 
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("male", 618), 
+    Activity_level = "moderate"), 
+  data.frame(
+    min_age = seq(1, 103, by = 1), 
+    max_age = seq(2, 104, by = 1), 
+    Gender = rep("male", 618), 
+    Activity_level = "heavy")) %>% 
+  mutate(Age_min = ifelse(min_age %in% c(1:17), 
+                          min_age, 
+                          ifelse(min_age %in% c(18:29), 
+                                 18, 
+                                 ifelse(min_age %in% c(30:59), 
+                                        30, 
+                                        ifelse(min_age >= 60, 
+                                               60, 
+                                               NA)))), 
+         Age_max = if_else(max_age %in% c(2:18), 
+                           max_age, 
+                           ifelse(max_age %in% c(19:30), 
+                                  30, 
+                                  ifelse(max_age %in% c(31:60), 
+                                         60, 
+                                         ifelse(max_age >= 61, 
+                                                999, 
+                                                NA)))))
+
+expanded_ages$Gender <- as.character(expanded_ages$Gender)
+expanded_ages$Activity_level <- as.character(expanded_ages$Activity_level)
+
+head(expanded_ages)
+
+```
+
+Join the expanded child and adult data sets.
+
+```{r}
+
+av_der <- av_der_child %>% 
+  dplyr::full_join(
+    av_der_adult, 
+    by = c("Age_min", "Age_max", "Gender", "Activity_level", "av_body_mass", "av_kcalPerDay")) %>% 
+  dplyr::arrange(Age_min)
+
+head(av_der)
+
+```
+
+The harmonized DER data set also contains an 'age' column, the midpoint of each age range value. NB: Children under the age of 5 years are classified as having "moderate" activity levels exclusive of "light" or "heavy" activity levels.
+
+```{r}
+
+der <- av_der %>% 
+  dplyr::full_join(
+    expanded_ages, 
+    by = c("Age_min", "Age_max", "Gender", "Activity_level")) %>% 
+  dplyr::group_by(min_age, max_age, Gender, Activity_level) %>% 
+  dplyr::summarise(
+    av_kcalPerDay = mean(av_kcalPerDay, 
+                         na.rm = TRUE), 
+    av_body_mass = mean(av_body_mass, 
+                        na.rm = TRUE), 
+    .groups = "drop") %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(age = 0.5*(min_age + max_age))
+
+head(der)
+
+```
+
+Plot the data.
+
+```{r}
+
+p1 <- ggplot(data = der, aes(x = age, y = av_kcalPerDay)) + 
+  geom_point(aes(colour = Activity_level, 
+                shape = Gender)) + 
+  geom_smooth(aes(colour = Activity_level, 
+                linetype = Gender), 
+              method = "loess", 
+              span = 0.1) + 
+  scale_color_manual(values = c("light" = "green", 
+                                "moderate" = "blue", 
+                                "heavy" = "red")) + 
+  scale_shape_manual(values = c("male" = 2, "female" = 3)) + 
+  scale_linetype_manual(values = c("male" = "dashed", "female" = "solid")) + 
+  labs(
+    x = "Age (yrs)", 
+    y = "kcal/cap/day", 
+    colour = "Activity \nLevel"
+  ) + 
+  theme_minimal()
+
+p1
+
+```
+
+There is a discontinuity in the DER between ages 18 and 19, probably because of the age-bracket averaging (18-30 years) for in the `der_adult` data set. Therefore, I use the values from the LOESS models (lines on the plot) as a "smoothed" version of the DER values from the harmonized data set.
+
+```{r}
+
+fit_data <- ggplot_build(p1)$data[[2]]
+
+extracted_fit_data <- fit_data %>% 
+  dplyr::mutate(gender = ifelse(linetype == "solid", 
+                         "female", 
+                         "male"), 
+         activity_level = ifelse(colour == "red", 
+                                 "heavy", 
+                                 ifelse(colour == "blue", 
+                                        "moderate", 
+                                        "light"))) %>% 
+  dplyr::rename("age" = x, "kcal_perDay" = y) %>% 
+  dplyr::select(gender, activity_level, age, kcal_perDay)
+
+# head(extracted_fit_data)
+
+ggplot(extracted_fit_data, aes(x = age, y = kcal_perDay)) + 
+  geom_line(aes(colour = activity_level, linetype = gender))
+
+```
+Bin the ages in the 'age' column by whole numbers and interpolate any empty DER values.
+
+```{r}
+
+tmp <- rbind(data.frame(gender = "female", 
+                  activity_level = "light", 
+                  age = seq(1:104)), 
+             data.frame(gender = "female", 
+                  activity_level = "moderate", 
+                  age = seq(1:104)), 
+             data.frame(gender = "female", 
+                  activity_level = "heavy", 
+                  age = seq(1:104)), 
+             data.frame(gender = "male", 
+                  activity_level = "light", 
+                  age = seq(1:104)), 
+             data.frame(gender = "male", 
+                  activity_level = "moderate", 
+                  age = seq(1:104)), 
+             data.frame(gender = "male", 
+                  activity_level = "heavy", 
+                  age = seq(1:104)))
+
+tmp$gender <- as.character(tmp$gender)
+tmp$activity_level <- as.character(tmp$activity_level)
+
+clean_fit_data <- extracted_fit_data %>% 
+  dplyr::mutate(age = round(age)) %>% 
+  dplyr::full_join(tmp, 
+                   by = c("gender", "activity_level", "age")) %>% 
+  dplyr::arrange(age)
+
+head(clean_fit_data)
+
+```
+
+```{r}
+
+interp_fit_data <- clean_fit_data %>% 
+  group_by(gender, activity_level) %>% 
+  arrange(age) %>% 
+  mutate(kcal_interp = zoo::na.approx(kcal_perDay, maxgap = 5, rule = 3)) %>% 
+  ungroup()
+
+interp_fit_data
+
+```
+
+```{r}
+
+ggplot(interp_fit_data, aes(x = age, y = kcal_interp)) + 
+  geom_line(aes(colour = activity_level, linetype = gender))
+
+```
+
+Now bin DER by the same age brackets as the population data.
+
+```{r}
+fit_data_final <- interp_fit_data %>% 
+  dplyr::group_by(gender, activity_level) %>% 
+  dplyr::mutate(min_age = ifelse(
+    age < 5, 
+    0, 
+    ifelse(
+      age >= 5 & age < 10, 
+      5, 
+      ifelse(
+        age >= 10 & age < 15, 
+        10, 
+        ifelse(
+          age >= 15 & age < 20, 
+          15, 
+          ifelse(
+            age >= 20 & age < 25, 
+            20, 
+            ifelse(
+              age >= 25 & age < 30, 
+              25, 
+              ifelse(
+                age >= 30 & age < 35, 
+                30, 
+                ifelse(
+                  age >= 35 & age < 40, 
+                  35, 
+                  ifelse(
+                    age >= 40 & age < 45, 
+                    40, 
+                    ifelse(
+                      age >= 45 & age < 50, 
+                      45, 
+                      ifelse(
+                        age >= 50 & age < 55, 
+                        50, 
+                        ifelse(
+                          age >= 55 & age < 60, 
+                          55, 
+                          ifelse(
+                            age >= 60 & age < 65, 
+                            60, 
+                            ifelse(
+                              age >= 65 & age < 70, 
+                              65, 
+                              ifelse(
+                                age >= 70 & age < 75, 
+                                70, 
+                                ifelse(
+                                  age >= 75 & age < 80, 
+                                  75, 
+                                  ifelse(
+                                    age >= 80 & age < 85, 
+                                    80, 
+                                    ifelse(
+                                      age >= 85 & age < 90, 
+                                      85, 
+                                      ifelse(
+                                        age >= 90 & age < 95, 
+                                        90, 
+                                        ifelse(
+                                          age >= 95 & age < 100, 
+                                          95, 
+                                          100)))))))))))))))))))), 
+    max_age = ifelse(
+      age < 5, 
+      4, 
+      ifelse(
+        age >= 5 & age < 10, 
+        9, 
+        ifelse(
+          age >= 10 & age < 15, 
+          14, 
+          ifelse(
+            age >= 15 & age < 20, 
+            19, 
+            ifelse(
+              age >= 20 & age < 25, 
+              24, 
+              ifelse(
+                age >= 25 & age < 30, 
+                29, 
+                ifelse(
+                  age >= 30 & age < 35, 
+                  34, 
+                  ifelse(
+                    age >= 35 & age < 40, 
+                    39, 
+                    ifelse(
+                      age >= 40 & age < 45, 
+                      44, 
+                      ifelse(
+                        age >= 45 & age < 50, 
+                        49, 
+                        ifelse(
+                          age >= 50 & age < 55, 
+                          54, 
+                          ifelse(
+                            age >= 55 & age < 60, 
+                            59, 
+                            ifelse(
+                              age >= 60 & age < 65, 
+                              64, 
+                              ifelse(
+                                age >= 65 & age < 70, 
+                                69, 
+                                ifelse(
+                                  age >= 70 & age < 75, 
+                                  74, 
+                                  ifelse(
+                                    age >= 75 & age < 80, 
+                                    79, 
+                                    ifelse(
+                                      age >= 80 & age < 85, 
+                                      84, 
+                                      ifelse(
+                                        age >= 85 & age < 90, 
+                                        89, 
+                                        ifelse(
+                                          age >= 90 & age < 95, 
+                                          94, 
+                                          ifelse(
+                                            age >= 95 & age < 100, 
+                                            99, 
+                                            104))))))))))))))))))))) %>% 
+  ungroup() %>% 
+  dplyr::group_by(gender, activity_level, min_age, max_age) %>% 
+  dplyr::summarise(kcal_mean = mean(kcal_interp), 
+            .groups = "drop")
+
+head(fit_data_final)
+```
+
+Join the mean-AMDR and metabolic requirements data frames.
+
+```{r}
+
+ssp_kcal <- ssp_world_long %>% 
+  dplyr::full_join(fit_data_final, 
+            by = c("gender", "min_age", "max_age")) %>% 
+  dplyr::mutate(million_kcal_perDay = millions*kcal_mean)
+
+head(ssp_kcal)
+
+
+```
+
+## Considering disaggregated education and activity levels
+
+The above analysis simplified food demand in two ways: it aggregated populations globally, and it assumed a moderate activity level the daily (healthy) caloric requirement. The SSPs give more detailed assumptions on national education levels by gender and age cohort, and the FAO healthy diet data give detailed information about metabolic energy requirements by age and gender that we aggregated into the three activity levels.
+
+The SSPs contain four education levels (i.e., "no education", "primary education", "secondary education", and "tertiary education"). I assume that individuals with primary level and below will tend to be employed in manual physical labor, secondary level will be employed in trades, and tertiary level will be white collar; hence, I map these onto "heavy", "moderate", and "light" activity levels, respectively.
+
+I made several vectors of character strings:
+
+```{r}
+
+for(i in seq(0, 100, by = 5)){
+  tmp1 <- paste0("Population|Female|Aged", i, "-", i+4, "|No Education")
+  tmp2 <- paste0("Population|Male|Aged", i, "-", i+4, "|No Education")
+  
+  tmp3 <- paste0("Population|Female|Aged", i, "-", i+4, "|Primary Education")
+  tmp4 <- paste0("Population|Male|Aged", i, "-", i+4, "|Primary Education")
+  
+  tmp5 <- paste0("Population|Female|Aged", i, "-", i+4, "|Secondary Education")
+  tmp6 <- paste0("Population|Male|Aged", i, "-", i+4, "|Secondary Education")
+  
+  tmp7 <- paste0("Population|Female|Aged", i, "-", i+4, "|Tertiary Education")
+  tmp8 <- paste0("Population|Male|Aged", i, "-", i+4, "|Tertiary Education")
+  
+  #unless age bracket is 100+
+  if(i==100){
+    tmp1 <- "Population|Female|Aged100+|No Education"
+    tmp2 <- "Population|Male|Aged100+|No Education"
+    
+    tmp3 <- "Population|Female|Aged100+|Primary Education"
+    tmp4 <- "Population|Male|Aged100+|Primary Education"
+    
+    tmp5 <- "Population|Female|Aged100+|Secondary Education"
+    tmp6 <- "Population|Male|Aged100+|Secondary Education"
+    
+    tmp7 <- "Population|Female|Aged100+|Tertiary Education"
+    tmp8 <- "Population|Male|Aged100+|Tertiary Education"
+  }
+  
+  if(i==0){ 
+    female_pop_noEd <- tmp1
+    male_pop_noEd   <- tmp2
+    
+    female_pop_primEd <- tmp3
+    male_pop_primEd   <- tmp4
+    
+    female_pop_secondEd <- tmp5
+    male_pop_secondEd   <- tmp6
+    
+    female_pop_tertiEd <- tmp7
+    male_pop_tertiEd   <- tmp8
+  }
+  if(i >0){
+    female_pop_noEd <- c(female_pop_noEd, tmp1)
+    male_pop_noEd   <- c(male_pop_noEd, tmp2)
+    
+    female_pop_primEd <- c(female_pop_primEd, tmp3)
+    male_pop_primEd   <- c(male_pop_primEd, tmp4)
+    
+    female_pop_secondEd <- c(female_pop_secondEd, tmp5)
+    male_pop_secondEd   <- c(male_pop_secondEd, tmp6)
+    
+    female_pop_tertiEd <- c(female_pop_tertiEd, tmp7)
+    male_pop_tertiEd   <- c(male_pop_tertiEd, tmp8)
+  }
+}
+
+```
+
+I turn these into a data frame (`age_edu_map`) that maps the 'VARIABLE' column from the SSP data to disaggregated 'gender', 'education_level', 'min_age' and 'max_age' columns, and adds an 'activity_level' column.
+
+```{r}
+
+age_edu_map <- rbind(tibble(VARIABLE = female_pop_noEd, 
+                        gender = "female", 
+                        education_level = "none", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_noEd, 
+                        gender = "male", 
+                        education_level = "none", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = female_pop_primEd, 
+                        gender = "female", 
+                        education_level = "primary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_primEd, 
+                        gender = "male", 
+                        education_level = "primary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = female_pop_secondEd, 
+                        gender = "female", 
+                        education_level = "secondary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_secondEd, 
+                        gender = "male", 
+                        education_level = "secondary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = female_pop_tertiEd, 
+                        gender = "female", 
+                        education_level = "tertiary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)), 
+                     tibble(VARIABLE = male_pop_tertiEd, 
+                        gender = "male", 
+                        education_level = "tertiary", 
+                        min_age = seq(0, 100, by = 5), 
+                        max_age = seq(4, 104, by = 5)))
+
+age_edu_map <- age_edu_map %>% 
+  dplyr::mutate(activity_level = ifelse(
+    education_level %in% c("none", "primary"), 
+    "heavy", 
+    ifelse(
+      education_level == "secondary", 
+      "moderate", 
+      "light")))
+
+
+```
+
+Rows rows in `ssp_base` that do not have education information are filtered, and joined with the `age_edu_map` data frame to produce `ssp_edu`.
+
+```{r}
+
+ssp_edu <- ssp_base %>%
+  filter(VARIABLE %in% age_edu_map$VARIABLE) %>%
+  full_join(age_edu_map, 
+            by = "VARIABLE") %>%
+  arrange(min_age)
+
+```
+
+Reshape the `ssp_edu` data frame into a long version, `ssp_edu_long`.
+
+```{r}
+
+ssp_edu_long <- ssp_edu %>% 
+  dplyr::select(-MODEL, -VARIABLE, -UNIT) %>%
+  tidyr::pivot_longer(cols = starts_with("X"),
+               names_to = "year",
+               names_prefix = "X",
+               values_to = "millions") %>%
+  dplyr::mutate(year = as.numeric(year)) %>%
+  tidyr::drop_na()
+
+head(ssp_edu_long)
+
+```
+
+
+```{r}
+
+ssp2_kcal_edu <- ssp_edu_long %>% 
+  dplyr::filter(SCENARIO == "SSP2_v9_130115") %>% 
+  dplyr::full_join(fit_data_final, 
+                   by = c("gender", "min_age", "max_age", "activity_level")) 
+
+head(ssp2_kcal_edu)
+
+```
+
+## Dietary target
+
+Based on a diet that is balanced and healthy, how much land is necessary? Based on the EAT-Lancet Planetary Health Diet, a 2500 kcal per day diet should break down to the following:
+
+Whole grains: 811 kcal/day (Range: 232 g/day)
+Tubers and starchy vegetables: 39 (50 g/day; 0-100 g/day)
+Vegetables: 78 (300; 300-600)
+Fruits: 126 (200; 100-300)
+Dairy: 153 (250; 0-500)
+Proteins:
+- beef, lamb, pork: 30 (14; 0-28)
+- chicken and other poultry: 62 (29; 0-58)
+- eggs: 19 (13; 0-25)
+- fish: 40 (28; 0-100)
+- legumes: 284 (75; 0-100)
+- nuts: 291 (50; 0-75)
+Added fats:
+- unsaturated oils: 354 (40; 20-80)
+- saturated oils: 96 (11.8; 0-11.8)
+- all sugars: 117 (31; 0-31)
+
+```{r}
+EATlancet_diet_map <- data.frame(
+  EATlancet_group = c("eggs", "chicken_poultry", "dairy", "beef_lamb_pork", "whole_grains", "fruits", "fish", "all_oils", "legumes", "tubers_starchy_vegetables", "all_sugars", "nuts", "vegetables"), 
+  kcal_day = c(19, 62, 153, 30, 811, 126, 40, 450, 284, 39, 117, 291, 78), 
+  g_day_ave = c(13, 29, 250, 14, 232, 200, 28, 52, 75, 50, 31, 50, 300), 
+  g_day_min = c(0, 0, 0, 0, 232, 100, 0, 20, 0, 0, 0, 0, 300), 
+  g_day_max = c(25, 58, 500, 28, 232, 300, 100, 92, 100, 100, 31, 75, 600)
+) %>% 
+  dplyr::mutate(kcal_ratio = kcal_day/2500, 
+                mass_ratio = g_day_ave/1324)
+```
+
+Demand for kcal based on food group ratios from the EAT-Lancet Planetary Health diet.
+```{r}
+
+EATlancet_diet_wide <- EATlancet_diet_map %>% 
+  dplyr::select(EATlancet_group, kcal_ratio) %>% 
+  pivot_wider(., names_from = EATlancet_group, values_from = kcal_ratio)
+
+```
+
+```{r}
+
+ssp2_kcal_eatlancetdiet <- ssp2_kcal_edu %>% 
+  dplyr::bind_cols(EATlancet_diet_wide) %>% 
+  dplyr::mutate(
+    eggs = eggs*kcal_mean*365*millions, 
+    chicken_poultry = chicken_poultry*kcal_mean*365*millions, 
+    dairy = dairy*kcal_mean*365*millions, 
+    beef_lamb_pork = beef_lamb_pork*kcal_mean*365*millions, 
+    whole_grains = whole_grains*kcal_mean*365*millions, 
+    fruits = fruits*kcal_mean*365*millions, 
+    fish = fish*kcal_mean*365*millions, 
+    all_oils = all_oils*kcal_mean*365*millions, 
+    legumes = legumes*kcal_mean*365*millions, 
+    tubers_starchy_vegetables = tubers_starchy_vegetables*kcal_mean*365*millions, 
+    all_sugars = all_sugars*kcal_mean*365*millions, 
+    nuts = nuts*kcal_mean*365*millions, 
+    vegetables = vegetables*kcal_mean*365*millions
+    ) %>% 
+  dplyr::group_by(REGION, year) %>% 
+  dplyr::summarise(
+    eggs = sum(eggs, na.rm = TRUE)*1e6, 
+    chicken_poultry = sum(chicken_poultry, na.rm = TRUE)*1e6, 
+    dairy = sum(dairy, na.rm = TRUE)*1e6, 
+    beef_lamb_pork = sum(beef_lamb_pork, na.rm = TRUE)*1e6, 
+    whole_grains = sum(whole_grains, na.rm = TRUE)*1e6, 
+    fruits = sum(fruits, na.rm = TRUE)*1e6, 
+    fish = sum(fish, na.rm = TRUE)*1e6, 
+    all_oils = sum(all_oils, na.rm = TRUE)*1e6, 
+    legumes = sum(legumes, na.rm = TRUE)*1e6, 
+    tubers_starchy_vegetables = sum(tubers_starchy_vegetables, na.rm = TRUE)*1e6, 
+    all_sugars = sum(all_sugars, na.rm = TRUE)*1e6, 
+    nuts = sum(nuts, na.rm = TRUE)*1e6, 
+    vegetables = sum(vegetables, na.rm = TRUE)*1e6, 
+    .groups = "drop"
+  )
+
+head(ssp2_kcal_eatlancetdiet)
+
+```
+
+Now map the regions to subregional areas and filter by 2050 to see the target values (measured in kcal).
+```{r}
+eatlancetdiet_target <- ssp2_kcal_eatlancetdiet %>% 
+  dplyr::rename(iso_alpha3 = REGION) %>% 
+  dplyr::full_join(loc_map_reduced %>% 
+                     dplyr::select(iso_alpha3, subregionname), 
+                   by = "iso_alpha3") %>% 
+  dplyr::group_by(year, subregionname) %>% 
+  dplyr::summarise(
+    eggs = sum(eggs, na.rm = TRUE), 
+    chicken_poultry = sum(chicken_poultry, na.rm = TRUE), 
+    dairy = sum(dairy, na.rm = TRUE), 
+    beef_lamb_pork = sum(beef_lamb_pork, na.rm = TRUE), 
+    whole_grains = sum(whole_grains, na.rm = TRUE), 
+    fruits = sum(fruits, na.rm = TRUE), 
+    fish = sum(fish, na.rm = TRUE), 
+    all_oils = sum(all_oils, na.rm = TRUE), 
+    legumes = sum(legumes, na.rm = TRUE), 
+    tubers_starchy_vegetables = sum(tubers_starchy_vegetables, na.rm = TRUE), 
+    all_sugars = sum(all_sugars, na.rm = TRUE), 
+    nuts = sum(nuts, na.rm = TRUE), 
+    vegetables = sum(vegetables, na.rm = TRUE), 
+    .groups = "drop"
+  ) %>% 
+  dplyr::filter(year == 2050)
+
+head(eatlancetdiet_target)
+```
+
+```{r}
+
+eatlancetdiet_target_long <- eatlancetdiet_target %>% 
+  tidyr::pivot_longer(., cols = eggs:vegetables, names_to = "EATlancet_group", values_to = "kcal_yr")
+
+head(eatlancetdiet_target_long)
+
+```
+### Crop demand
+
+The production of crops required to satisfy the EAT-Lancet Planetary Health diet target by 2050 is given in the following:
+
+```{r}
+eatlancetdiet_target_crops <- eatlancetdiet_target_long %>% 
+  dplyr::filter(!EATlancet_group %in% c("eggs", "chicken_poultry", "dairy", "beef_lamb_pork", "fish")) %>% 
+  dplyr::left_join(g_kcal_density, 
+                   by = "EATlancet_group") %>% 
+  dplyr::mutate(tonnes = kcal_yr*g_kcal*1e-6)
+
+head(eatlancetdiet_target_crops)
+```
+
+### Livestock feed demand
+
+What is the land requirement, based on feed conversion ratios (FCRs), for feeding livestock? Using the EAT-Lancet diet numbers to convert kcal to g of food, we get:
+```{r}
+g_kcal_density <- EATlancet_diet_map %>% 
+  dplyr::mutate(g_kcal = g_day_ave/kcal_day) %>% 
+  dplyr::select(EATlancet_group, g_kcal)
+```
+
+
+```{r}
+eatlancetdiet_target_animalprod <- eatlancetdiet_target_long %>% 
+  dplyr::filter(EATlancet_group %in% c("eggs", "chicken_poultry", "dairy", "beef_lamb_pork", "fish")) %>% 
+  dplyr::left_join(g_kcal_density, 
+                   by = "EATlancet_group") %>% 
+  dplyr::mutate(tonnes = kcal_yr*g_kcal*1e-6)
+
+head(eatlancetdiet_target_animalprod)
+```
+
+Now use carcass weight FCR to determine how much dry matter each livestock class would consume.
+
+```{r}
+fcr_map <- data.frame(
+  EATlancet_group = c("beef_lamb_pork", "chicken_poultry", "dairy", "eggs", "fish"), 
+  fcr = c(10, 2.8, 10, 2, 4.6)
+)
+
+fcr_map
+```
+```{r}
+eatlancetdiet_animalfeeds <- eatlancetdiet_target_animalprod %>% 
+  dplyr::left_join(fcr_map, 
+                   by = "EATlancet_group") %>% 
+  dplyr::mutate(feed_tonnes = tonnes*fcr) %>% 
+  dplyr::select(EATlancet_group, year, subregionname, feed_tonnes)
+
+head(eatlancetdiet_animalfeeds)
+```
+What mixture of crops is used for feed?
+```{r}
+
+feed_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5521 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(feed_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+food_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5142 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(food_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+seed_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5527 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(seed_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+proc_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5131 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(proc_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+othe_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5154 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(othe_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+loss_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5123 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(loss_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+products_countries <- food_regions %>% 
+  dplyr::full_join(feed_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::full_join(seed_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::full_join(loss_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::full_join(proc_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::full_join(othe_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::mutate_each(funs(replace(., which(is.na(.)), 0))) %>% 
+  dplyr::mutate(total = rowSums(across(food_tonnes:othe_tonnes)))
+
+```
+
+
+```{r}
+
+products_regions <- products_countries %>% 
+  dplyr::rename(fao_countrycode = Area.Code) %>% 
+  dplyr::full_join(loc_map_reduced %>% 
+                     dplyr::select(iso_alpha3, fao_countrycode, subregionname), 
+                   by = "fao_countrycode") %>% 
+  dplyr::group_by(subregionname, Year, model_group) %>% 
+  dplyr::summarise(
+    food_tonnes = sum(food_tonnes, na.rm = TRUE), 
+    feed_tonnes = sum(feed_tonnes, na.rm = TRUE), 
+    seed_tonnes = sum(seed_tonnes, na.rm = TRUE), 
+    loss_tonnes = sum(loss_tonnes, na.rm = TRUE), 
+    proc_tonnes = sum(proc_tonnes, na.rm = TRUE), 
+    othe_tonnes = sum(othe_tonnes, na.rm = TRUE), 
+    total = sum(total, na.rm = TRUE), 
+    .groups = "drop"
+    )
+
+head(products_regions)
+
+```
+
+
+
+```{r}
+
+prod_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5511 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(prod_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+imports_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5611 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(import_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+exports_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5911 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(export_tonnes = -sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+stockvar_regions <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 5072 & !is.na(model_group)) %>% 
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(stockvar_tonnes = sum(Value, na.rm = TRUE)*1e3, 
+                   .groups = "drop")
+
+```
+
+```{r}
+
+stocks_countries <- prod_regions %>% 
+  dplyr::full_join(imports_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::full_join(exports_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::full_join(stockvar_regions, 
+                   by = c("Area.Code", "Area", "Year", "model_group")) %>% 
+  dplyr::mutate_each(funs(replace(., which(is.na(.)), 0))) %>%
+  dplyr::mutate(total = rowSums(across(prod_tonnes:stockvar_tonnes))) %>% 
+  dplyr::full_join(loc_map_reduced, 
+                   by = c("Area.Code" = "fao_countrycode")) %>% 
+  dplyr::select(subregionname, countryname, iso_alpha3, Year, model_group, prod_tonnes:total)
+
+head(stocks_countries)
+```
+
+```{r}
+
+stocks_regions <- stocks_countries %>% 
+  dplyr::group_by(subregionname, Year, model_group) %>% 
+  dplyr::summarise(
+    prod_tonnes = sum(prod_tonnes, na.rm = TRUE), 
+    import_tonnes = sum(import_tonnes, na.rm = TRUE), 
+    export_tonnes = sum(export_tonnes, na.rm = TRUE), 
+    stockvar_tonnes = sum(stockvar_tonnes, na.rm = TRUE), 
+    total = sum(total, na.rm = TRUE), 
+    .groups = "drop"
+  )
+
+head(stocks_regions)
+
+```
+
+I want to test the quality of the data. I join the data frame `products_regions` containing food, feed, seed, etc. data (summed to 'total_products') with the data frame `stocks_regions` containing production, import/export, etc. data (summed to 'total_stocks'). I expect that the totals should be equivalent.
+
+```{r}
+
+test <- dplyr::full_join(products_regions %>% 
+                   dplyr::rename(total_products = total), 
+                 stocks_regions %>% 
+                   dplyr::rename(total_stocks = total), 
+                 by = c("subregionname", "Year", "model_group")) %>% 
+  dplyr::mutate(diff = total_products - total_stocks)
+
+head(test)
+
+ggplot(test, 
+       aes(x = diff*1e-3)) + 
+  geom_histogram(bins = 1000) + 
+  coord_cartesian(xlim = c(-10, 250)) + 
+  labs(
+    x = "1000 tonnes", 
+    y = "counts"
+  )
+
+```
+
+The totals are nearly equivalent. I will take 'total_products' as domestic usage and use these to determine livestock feed mixtures. I will assume for the moment that all livestock/fish feed mixtures are the same, but unique to regions.
+
+Determine livestock/fish feed mixtures by region.
+
+```{r}
+
+feed_regimes_regions <- products_regions %>% 
+  dplyr::select(subregionname, Year, model_group, feed_tonnes) %>% 
+  dplyr::group_by(subregionname, Year) %>% 
+  dplyr::mutate(feed_sum = sum(feed_tonnes, na.rm = TRUE), 
+                feed_ratio = ifelse(feed_sum != 0, 
+                                    feed_tonnes/feed_sum, 
+                                    0)) %>% 
+  dplyr::filter(feed_ratio > 0)
+
+head(feed_regimes_regions)
+
+```
+
+```{r}
+
+ggplot(feed_regimes_regions %>% 
+         filter(subregionname == "Eastern Europe"), 
+       aes(x = Year, 
+           y = feed_ratio)) + 
+  geom_line(aes(colour = model_group))
+
+```
+
+For every tonne of feed dry matter going to livestock (of any type), the mixture regime is in the following proportions:
+
+```{r}
+
+feed_regime <- feed_regimes_regions %>% 
+  dplyr::group_by(subregionname, model_group) %>% 
+  dplyr::summarise(feed_ratio_ave = mean(feed_ratio, na.rm = TRUE)) %>% 
+  dplyr::mutate(norm = sum(feed_ratio_ave, na.rm = TRUE), 
+                feed_ratio_ave = feed_ratio_ave/norm) %>% 
+  dplyr::select(-norm) %>% 
+  dplyr::ungroup() %>% 
+  tidyr::pivot_wider(., 
+                     names_from = model_group, 
+                     values_from = feed_ratio_ave, 
+                     values_fill = 0)
+
+head(feed_regime)
+
+```
+
+The following data frame should be read as: the quantity ('feed_ingredient' in tonnes) of each agricultural product class necessary to produce the target contents of the EAT-Lancet Planetary Health diet in 2050, according to regional human population estimates.
+
+```{r}
+eatlancetdiet_animalfeeds_1 <- eatlancetdiet_animalfeeds %>% 
+  dplyr::left_join(feed_regime, 
+                   by = "subregionname") %>% 
+  tidyr::drop_na() %>% 
+  dplyr::mutate(bovine_dairy = feed_tonnes*bovine_dairy,
+                bovine_meat = feed_tonnes*bovine_meat,
+                cereal = feed_tonnes*cereal,
+                fish_meat = feed_tonnes*fish_meat,
+                fish_other = feed_tonnes*fish_other,
+                oilcrop = feed_tonnes*oilcrop,
+                pulse = feed_tonnes*pulse,
+                rootstubers = feed_tonnes*rootstubers,
+                sugarcrop = feed_tonnes*sugarcrop,
+                fruit = feed_tonnes*fruit,
+                sus_meat = feed_tonnes*sus_meat,
+                vegetable = feed_tonnes*vegetable,
+                aves_dairy = feed_tonnes*aves_dairy,
+                aquaticmarine_product = feed_tonnes*aquaticmarine_product,
+                stimulants = feed_tonnes*stimulants,
+                caprine_meat = feed_tonnes*caprine_meat,
+                citrus = feed_tonnes*citrus) %>% 
+  dplyr::select(-feed_tonnes) %>% 
+  tidyr::pivot_longer(., 
+                      cols = bovine_dairy:citrus, 
+                      names_to = "feed_ingredient", 
+                      values_to = "tonnes")
+
+head(eatlancetdiet_animalfeeds_1)
+```
+Add the following crops and livestock products to the crop/livestock demand in 2050. (I will not recursively add new resources to feed these livestock; rather, I will assume that the vast majority of livestock parts used as ingredients in livestock feed mixtures are discards not otherwise for human consumption, and that would otherwise have been counted as waste.)
+
+```{r}
+eatlancetdiet_target_allprod <- eatlancetdiet_target_animalprod %>% 
+  dplyr::select(-kcal_yr, -g_kcal) %>% 
+  dplyr::full_join(eatlancetdiet_target_crops %>% 
+  dplyr::select(-kcal_yr, -g_kcal), 
+  by = c("year", "subregionname", "EATlancet_group", "tonnes"))
+
+```
+
+
+```{r}
+
+eatlancetdiet_summary <- eatlancetdiet_animalfeeds_1 %>% 
+  dplyr::group_by(year, subregionname, feed_ingredient) %>% 
+  dplyr::summarise(tonnes = sum(tonnes, na.rm = FALSE), 
+                   .groups = "drop") %>% 
+  dplyr::rename(food_group = feed_ingredient, 
+                tonnes_feed = tonnes) %>% 
+  dplyr::full_join(
+    eatlancetdiet_target_allprod %>% 
+      dplyr::rename(tonnes_food = tonnes) %>% 
+      dplyr::mutate(
+        food_group = ifelse(
+          EATlancet_group == "whole_grains", 
+          "cereal", ifelse(
+            EATlancet_group == "fruits", 
+            "fruit", ifelse(
+              EATlancet_group == "all_oils", 
+              "oilcrop", ifelse(
+                EATlancet_group == "legumes", 
+                "pulse", ifelse(
+                  EATlancet_group == "nuts", 
+                  "treenut", ifelse(
+                    EATlancet_group == "tubers_starchy_vegetables", 
+                    "rootstubers", ifelse(
+                      EATlancet_group == "vegetables", 
+                      "vegetable", ifelse(
+                        EATlancet_group == "all_sugars", 
+                        "sugarcrop", ifelse(
+                          EATlancet_group == "eggs", 
+                          "aves_dairy", ifelse(
+                            EATlancet_group == "chicken_poultry", 
+                            "aves_meat", ifelse(
+                              EATlancet_group == "dairy", 
+                              "bovine_dairy", ifelse(
+                                EATlancet_group == "beef_lamb_pork", 
+                                "bovine_meat", ifelse(
+                                  EATlancet_group == "fish", 
+                                  "fish_meat", 
+                                  NA)))))))))))))), 
+    by = c("year", "subregionname", "food_group")
+  ) %>% 
+  dplyr::mutate_each(funs(replace(., which(is.na(.)), 0))) %>%
+  dplyr::mutate(tonnes_total = tonnes_feed + tonnes_food)
+
+head(eatlancetdiet_summary)
+
+```
+
+A tropical livestock unit (TLU) is equivalent to 250 kg (liveweight). The following table is used for reference.
+
+```{r}
+live_tlu_per_animal <- data.frame(
+  model_group    = c("aves", "bovine", "caprine", "camelid", "equine", "rodentia", "sus"),
+  TLU_per_animal = c(  1e-2,        1,      0.09,      1.13,     0.75,       1e-2,   0.2),
+  citation       = c("Jahnke et al 1988. Numbers from FAOSTAT (2000)", "Jahnke et al 1988. Numbers from FAOSTAT (2000)", "Kassam et al 1991, FAO & IIASA", "Kassam et al 1991, FAO & IIASA", "Kassam et al 1991, FAO & IIASA", "Kassam et al 1991, FAO & IIASA", "Jahnke et al 1988. Numbers from FAOSTAT (2000)")
+)
+```
+
+
+Chicken (layers) lay about 250 eggs per year; at 50 g per egg on average, that goes to about 12.5 kg of eggs per layer per year. I assume that the average layer mass is 2.5 kg; so the 'proc_to_live_weight_ratio' is 5.
+
+Cattle in the US produced about 18000 lb of milk per cow in 2000, or 8.2 tonnes per cow. I assume that dairy products with lower water content are on average 0.25 times the mass of milk, or 2.05 tonnes per cow. Based on the TLU definition of 250 kg per TLU, this is 8.2 TLU; so for each cow (1 TLU) in this analysis, the 'proc_to_live_weight_ratio' of dairy products is 8.2.
+
+A (dromedary) camel produces about 1800 kg of milk per cow, or 1.8 tonnes. Using the method I did for cattle, and an assumed product water content of 0.25 times the mass of the camel milk, this goes to 0.45 tonnes per cow, or an equivalent mass to 1.8 TLU. Camelids (1.13 TLU) will therefore have a 'proc_to_live_weight_ratio' of 1.6.
+
+A dairy goat will produce about 860 kg of milk per doe per year, or 0.86 tonnes. For an average water content of 0.25, its dairy products will be 0.215 tonnes per doe, or 0.86 TLU. For caprine TLU of 0.09, the 'proc_to_live_weight_ratio' is 9.6.
+
+Source of livestock dressing percentages: [Schweihofer, J.P., 2011. Carcass dressing percentage and cooler shrink. Michigan State University Extension.](https://www.canr.msu.edu/news/carcass_dressing_percentage_and_cooler_shrink)
+
+Source of camel dressing percentage and camel milk production value: Chapter VI in [Yagil, R., 1982. Camels and camel milk. FAO.](http://www.fao.org/3/x6528e/X6528E06.htm#:~:text=The%20brisket%2C%20ribs%20and%20loin,et%20al.%2C%201972).) E.g., "The dressing percentage of the carcass varies between 52 percent and 77 percent"
+
+The processed weight to live weight for each of these animals is as follows:
+```{r}
+proc_per_animal <- data.frame(
+  model_group= c("aves", "aves", "bovine", "bovine", "caprine", "caprine", "camelid", "camelid", "equine", "rodentia", "sus", "fish", "fish"),
+  food_group = c("aves_dairy", "aves_meat", "bovine_dairy", "bovine_meat", "caprine_dairy", "caprine_meat", "camelid_dairy", "camelid_meat", "equine_meat", "rodentia_meat", "sus_meat", "fish_meat", "fish_other"), 
+  proc_to_live_weight_ratio = c(5.0, 0.71, 8.2, 0.62, 9.6, 0.565, 1.6, 0.645, 0.5, 0.3, 0.5, 0.5, 0.9)
+)
+
+proc_per_animal
+```
+Original crop weight prior to food/feed processing. This uses an assumed value chain loss of 32%.
+```{r}
+proc_per_crop <- data.frame(
+  model_group = c("cereal", "pulse", "rootstubers", "fibercrop", "oilcrop", "citrus", "fruit", "vegetable", "sugarcrop", "treenut"), 
+  food_group = c("cereal", "pulse", "rootstubers", "fibercrop", "oilcrop", "citrus", "fruit", "vegetable", "sugarcrop", "treenut"), 
+  proc_to_harvest_weight_ratio = 0.68
+)
+
+proc_per_crop
+
+```
+Merge these data frames to make a conversion chart. These numbers will be scaling factors to modify the crop and livestock food/feed products to generate original harvest/liveweight numbers.
+```{r}
+
+scaling_factor_df <- proc_per_animal %>% 
+  dplyr::full_join(proc_per_crop, 
+                   by = c("model_group", "food_group")) %>% 
+  dplyr::mutate(scaling_factor = ifelse(!is.na(proc_to_live_weight_ratio), 
+                                        proc_to_live_weight_ratio, 
+                                        proc_to_harvest_weight_ratio)) 
+
+head(scaling_factor_df)
+
+```
+
+#### Livestock pasture demand
+
+```{r}
+eatlancetdiet_summary_2 <- eatlancetdiet_summary %>% 
+  dplyr::left_join(scaling_factor_df %>% 
+                     dplyr::select(food_group, scaling_factor), 
+                   by = "food_group") %>% 
+  dplyr::mutate(crop_live_weight = ifelse(!is.na(scaling_factor), 
+                                          tonnes_total/scaling_factor, 
+                                          NA)) %>% 
+  dplyr::select(year, subregionname, food_group, crop_live_weight) %>% 
+  tidyr::drop_na()
+
+head(eatlancetdiet_summary_2)
+```
+Estimate livestock numbers from the herd average live weights, based on the 'live_tlu_per_animal' data and 250 kg per TLU.
+```{r}
+herd_ave <- data.frame(
+  food_group = c("aves_dairy", "aves_meat", "bovine_dairy", "bovine_meat", "caprine_dairy", "caprine_meat", "camelid_dairy", "camelid_meat", "equine_meat", "rodentia_meat", "sus_meat"), 
+  TLU = c(0.01, 0.01, 1, 1, 0.09, 0.09, 1.13, 1.13, 0.75, 0.01, 0.2)
+) %>% 
+  dplyr::mutate(herd_av_t = 0.25*TLU)
+```
+
+
+The result is the estimated head count of herd/flock sizes for each region. NB: The back-conversion of 'beef_lamb_pork' to 'bovine_meat' instead of caprine or sus, or any other meats, coerced all livestock to be represented as cattle. This was a conscious choice, as cattle will demand a maximum of land and water resources; but this could be redressed in future.
+```{r}
+eatlancetdiet_summary_3 <- eatlancetdiet_summary_2 %>% 
+  dplyr::left_join(herd_ave, 
+                   by = "food_group") %>% 
+  tidyr::drop_na() %>% 
+  dplyr::mutate(head_av = crop_live_weight/herd_av_t) %>% 
+  dplyr::select(year, subregionname, food_group, head_av)
+
+head(eatlancetdiet_summary_3)
+```
+
+Assuming that one cow requires approximately 4 ha of pasture (including fallow land for animals with feed-subsidized diets), one sheep/goat requires 0.4 ha, one pig 0.2 ha, and one chicken 0.01 ha, I estimate the livestock pasture demand to be as follows:
+
+```{r}
+
+pasture_demand <- eatlancetdiet_summary_3 %>% 
+  dplyr::mutate(pasture_ha = ifelse(
+    food_group %in% c("bovine_dairy", "bovine_meat"), 
+    head_av*4, 
+    ifelse(
+      food_group %in% c("caprine_dairy", "caprine_meat"), 
+      head_av*0.4, 
+      ifelse(
+        food_group == "sus_meat", 
+        head_av*0.2, 
+        ifelse(
+          food_group %in% c("aves_dairy", "aves_meat"), 
+          head_av*0.01, 
+          0)))))
+
+pasture_demand_summary <- pasture_demand %>% 
+  dplyr::group_by(year, subregionname) %>% 
+  dplyr::summarise(pasture_ha = sum(pasture_ha, na.rm = TRUE), 
+                   .groups = "drop")
+
+pasture_demand_summary
+
+#TODO figure out what the NA subregionname was that became a 0 somewhere above
+
+```
+#### Cropland demand
+
+We need to consider how the yield gap will have closed by 2050. The yield in 2050 will determine how much cropland is required to produce the necessary food/feed crops.
+
+```{r}
+
+eatlancetdiet_summary_2 %>% 
+  dplyr::filter(!food_group %in% c("aves_dairy", "bovine_dairy", "bovine_meat", "caprine_meat", "fish_meat", "fish_other", "sus_meat"))
+
+```
+
+
+```{r, echo=FALSE}
+
+yield_gaps <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/GYGA_yield_gaps - summary.csv") %>% 
+  dplyr::select(iep_subregions, management, model_group, YA, YP, `YP-YA`, CROPPING_INTENSITY)
+
+yield_gaps
+
+```
+
+
+```{r}
+
+value_chain_loss <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/Alexander_etal_2017_food_waste - summary.csv")
+
+```
+
+
+```{r}
+
+value_chain_loss_yield_gap <- value_chain_loss %>% 
+  tidyr::pivot_longer(., cols = cereal:treenut, names_to = "model_group", values_to = "value_chain_loss") %>% 
+  dplyr::full_join(yield_gaps, 
+                   by = c("iep_subregions", "model_group")) %>% 
+  dplyr::filter(model_group %in% c("cereal", "citrus", "fibercrop", "fruit", "oilcrop", "pulse", "rootstubers", "sugarcrop", "treenut", "vegetable"))
+
+head(value_chain_loss_yield_gap)
+
+```
+
+
+
+Production = cropping_intensity.YA.cropland_area.(1-value_loss); cropland_area = production/(cropping_intensity.YA.(1-value_loss))
+```{r}
+
+cropland_area_demand <- eatlancetdiet_summary_2 %>% 
+  dplyr::full_join(value_chain_loss_yield_gap %>% 
+                     dplyr::rename(subregionname = iep_subregions, 
+                                   food_group = model_group), 
+                   by = c("subregionname", "food_group")) %>% 
+  dplyr::filter(food_group %in% c("cereal", "citrus", "fibercrop", "fruit", "oilcrop", "pulse", "rootstubers", "sugarcrop", "treenut", "vegetable")) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::mutate(
+    cropland_area = crop_live_weight/(CROPPING_INTENSITY*(1-value_chain_loss)*YA)
+  ) %>% 
+  dplyr::select(year, subregionname, food_group, management, cropland_area) %>% 
+  tidyr::pivot_wider(., names_from = management, values_from = cropland_area) %>% 
+  dplyr::rename(
+    irrigated_area_ha = irrigated, 
+    rainfed_area_ha = rainfed
+  )
+
+head(cropland_area_demand)
+
+```
+
+
+```{r}
+
+cropland_pasture_area_summary <- cropland_area_demand %>% 
+  dplyr::group_by(year, subregionname) %>% 
+  dplyr::summarise(irrigated_area_ha = sum(irrigated_area_ha, na.rm = TRUE), 
+                   rainfed_area_ha = sum(rainfed_area_ha, na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::full_join(pasture_demand_summary %>% 
+                     dplyr::filter(subregionname != 0), 
+                   by = c("year", "subregionname"))
+
+head(cropland_pasture_area_summary)
+
+```
+
+What is the present land-use area of these subregions?
+```{r}
+
+# url <- "http://fenixservices.fao.org/faostat/static/bulkdownloads/Inputs_LandUse_E_All_Data_(Normalized).zip"
+# download.file(url, destfile = "~/Data/IEP_Model/data_iep_model/Inputs_LandUse_E_All_Data_(Normalized).zip")
+
+fao_landuse <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/Inputs_LandUse_E_All_Data_(Normalized).csv")
+
+```
+
+6610 "Land used for cultivation of crops and animal husbandry. The total of areas under 'Cropland' and 'Permanent meadows and pastures.'"
+6611 "Agriculture area actually irrigated"
+6641 "Area of Coastal waters used for marine aquaculture facilities including supporting facilities. Aquaculture facilities include enclosures and pens (water areas confined by net, mesh and other barriers allowing uncontrolled water interchange), cages (open or covered enclosed structure constructed with net, mesh or any porous materials allowing natural water interchange), barrages (semi-permanent or seasonal enclosures formed by impervious man-made barriers and appropriate natural features) and rafts, ropes and stakes (raft, long lines or stakes used to culture shellfish and seaweeds). This category includes: Oyster beds and other types of shellfish (mussels, clams, abalones and scallops); Bodies of water used for seaweed production; Bodies of water used for fish rearing"
+6694 "Agricultural land actually irrigated that is Cropland."
+6646 "Forest land"
+6767 "Inland water areas that are used for aquaculture facilities including supporting facilities. Aquaculture facilities include enclosures and pens (water areas confined by net, mesh and other barriers allowing uncontrolled water interchange), cages (open or covered enclosed structure constructed with net, mesh or any porous materials allowing natural water interchange), barrages (semi-permanent or seasonal enclosures formed by impervious man-made barriers and appropriate natural features) and rafts, ropes and stakes (raft, long lines or stakes used to culture shellfish and seaweeds)."
+6771 "Area of inland waters that is used for catching aquatic animals or gathering aquatic plants in the wild."
+6601 "Country area excluding area under inland waters and coastal waters."
+6655 "Land under perm. meadows and pastures"
+6620 "Cropland"
+6633 "temporary pastures"
+
+```{r}
+land_use_data <- fao_landuse %>% 
+  dplyr::filter(`Year Code` >= 2000 & `Element Code` == 5110 & `Item Code` %in% c(6601, 6620, 6646, 6655, 6670, 6694)) %>% 
+  dplyr::select(-`Item Code`, -`Element Code`, -Element, -`Year Code`, -Flag) %>% 
+  tidyr::pivot_wider(., names_from = Item, values_from = Value, values_fill = 0) %>% 
+  dplyr::rename(
+    landarea = `Land area`, 
+    cropland = Cropland, 
+    cropland_irr = `Cropland area actually irrigated`, 
+    pasture = `Land under perm. meadows and pastures`, 
+    forest = `Forest land`, 
+    otherland = `Other land`
+  ) %>% 
+  dplyr::mutate(cropland_rfd = cropland - cropland_irr)
+
+head(land_use_data)
+
+```
+
+Add regional information.
+```{r}
+
+land_use_regions <- land_use_data %>% 
+  dplyr::rename(fao_countrycode = `Area Code`) %>% 
+  full_join(loc_map_reduced, 
+            by = "fao_countrycode") %>% 
+  dplyr::group_by(Year, subregionname) %>% 
+  dplyr::summarise(
+    landarea = sum(landarea, na.rm = TRUE), 
+    cropland = sum(cropland, na.rm = TRUE), 
+    pasture = sum(pasture, na.rm = TRUE), 
+    forest = sum(forest, na.rm = TRUE), 
+    otherland = sum(otherland, na.rm = TRUE), 
+    cropland_irr = sum(cropland_irr, na.rm = TRUE), 
+    cropland_rfd = sum(cropland_rfd, na.rm = TRUE), 
+    .groups = "drop"
+  ) %>% 
+  dplyr::filter(!is.na(subregionname))
+
+head(land_use_regions)
+
+```
+
+These data represent FAOSTAT data for land-use from 2000 to 2018, so I label this explicitly.
+```{r}
+land_use_2000to2018 <- land_use_regions
+
+```
+
+I fit linear models to the `land_use_2000to2018` data to extrapolate land-use estimates from 2019 to 2021.
+```{r}
+
+ag_yrs = data.frame(Year = seq(2019, 2021, by = 1))
+
+cropland_lm <- function(x) {
+    lm(cropland ~ Year, data = x)
+}
+cropland_irr_lm <- function(x) {
+    lm(cropland_irr ~ Year, data = x)
+}
+cropland_rfd_lm <- function(x) {
+    lm(cropland_rfd ~ Year, data = x)
+}
+pasture_lm <- function(x) {
+    lm(pasture ~ Year, data = x)
+}
+forest_lm <- function(x) {
+    lm(forest ~ Year, data = x)
+}
+otherland_lm <- function(x) {
+    lm(otherland ~ Year, data = x)
+}
+
+land_use_regions_pred <- land_use_regions %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::nest() %>% 
+  dplyr::mutate(crop_lm = map(data, cropland_lm), 
+         crop_irr_lm = map(data, cropland_irr_lm), 
+         crop_rfd_lm = map(data, cropland_rfd_lm), 
+         past_lm = map(data, pasture_lm), 
+         fore_lm = map(data, forest_lm), 
+         othe_lm = map(data, otherland_lm), 
+         crop_lm_pred = map(crop_lm, ~predict(., ag_yrs)), 
+         crop_irr_lm_pred = map(crop_irr_lm, ~predict(., ag_yrs)), 
+         crop_rfd_lm_pred = map(crop_rfd_lm, ~predict(., ag_yrs)), 
+         past_lm_pred = map(past_lm, ~predict(., ag_yrs)), 
+         fore_lm_pred = map(fore_lm, ~predict(., ag_yrs)), 
+         othe_lm_pred = map(othe_lm, ~predict(., ag_yrs))) %>% 
+  dplyr::ungroup() %>% 
+  tidyr::unnest(cols = c(crop_lm_pred, crop_irr_lm_pred, crop_rfd_lm_pred, past_lm_pred, fore_lm_pred, othe_lm_pred))
+
+land_use_2019to2021 <- land_use_regions_pred %>% 
+  dplyr::group_by(subregionname) %>% 
+  dplyr::mutate(Year = c(2019, 2020, 2021)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(Year, subregionname, crop_lm_pred, crop_irr_lm_pred, crop_rfd_lm_pred, past_lm_pred, fore_lm_pred, othe_lm_pred) %>% 
+  dplyr::rename(
+    cropland = crop_lm_pred, 
+    cropland_irr = crop_irr_lm_pred, 
+    cropland_rfd = crop_rfd_lm_pred, 
+    pasture = past_lm_pred, 
+    forest = fore_lm_pred, 
+    otherland = othe_lm_pred
+  )
+
+```
+
+Now I merge these data frames to generate a harmonized data frame of FAOSTAT and linear model extrapolated estimates of land-use data from 2000 to 2021.
+```{r}
+
+land_use_2000to2021 <- land_use_2000to2018 %>% 
+  dplyr::full_join(land_use_2019to2021, 
+                   by = c("Year", "subregionname", "cropland", "pasture", "forest", "otherland", "cropland_irr", "cropland_rfd")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea) %>% 
+  dplyr::ungroup()
+
+head(land_use_2000to2021)
+
+```
+Now compare how cropland and pasture land-use in 2021 compares with that projected for 2050, based on the EAT-Lancet Planetary Health diet. Units are 1000 ha.
+```{r}
+
+landarea_regions <- land_use_2000to2021 %>% 
+  dplyr::filter(Year == 2021) %>% 
+  dplyr::select(subregionname, landarea)
+
+irrigated_cropland_2021 <- land_use_2000to2021 %>% 
+  dplyr::filter(Year == 2021) %>% 
+  dplyr::select(Year, subregionname, landarea, cropland_irr, cropland_rfd)
+
+landuse_2021 <- land_use_2000to2021 %>% 
+  dplyr::filter(Year == 2021) %>% 
+  dplyr::select(Year, subregionname, landarea, cropland, pasture, forest, otherland)
+
+landuse_2021_long <- landuse_2021 %>% 
+  dplyr::select(-landarea) %>% 
+  tidyr::pivot_longer(., 
+                      cols = cropland:otherland, 
+                      names_to = "land_use", 
+                      values_to = "kha")
+
+head(landuse_2021_long)
+
+```
+
+Let's also assume that the proportion of irrigated to rain-fed cropland remains roughly constant through 2050. How does this effect cropland demand in 2050?
+```{r}
+irrigated_cropland_rel <- land_use_2000to2021 %>% 
+  dplyr::filter(Year == 2021) %>% 
+  dplyr::mutate(cropland_irr_rel = abs(cropland_irr)/cropland, 
+                cropland_rfd_rel = abs(cropland_rfd)/cropland) %>% 
+  dplyr::select(Year, subregionname, cropland_irr_rel, cropland_rfd_rel)
+
+irrigated_cropland_rel
+```
+
+
+Cropland is defined in terms of 'cropland_min' (completely irrigated) and 'cropland_max' (completely rain-fed) demands; pasture is defined as above.
+```{r}
+
+landuse_2050 <- cropland_pasture_area_summary %>% 
+  dplyr::mutate(
+    cropland_min = irrigated_area_ha*1e-3, 
+    cropland_max = rainfed_area_ha*1e-3, 
+    pasture = pasture_ha*1e-3
+  ) %>% 
+  dplyr::full_join(landarea_regions, 
+                   by = "subregionname")
+
+landuse_2050
+
+```
+
+Difference in pasture between 2021 and 2050.
+```{r}
+
+pasture_change <- landuse_2021_long %>% 
+  dplyr::rename(year = Year) %>% 
+  dplyr::filter(land_use == "pasture") %>% 
+  dplyr::full_join(landuse_2050 %>% 
+                     dplyr::select(year, subregionname, pasture) %>% 
+                     tidyr::pivot_longer(., cols = pasture, names_to = "land_use", values_to = "kha"), 
+                   by = c("year", "subregionname", "land_use", "kha")) 
+
+head(pasture_change)
+
+```
+```{r}
+ggplot(pasture_change, 
+       aes(x = year, 
+           y = kha)) + 
+  geom_line() + 
+  facet_wrap(~subregionname, 
+             scales = "free_y")
+```
+
+Difference between cropland in 2021 and maximum cropland demand (100% rainfed) in 2050.
+```{r}
+
+cropland_change <- landuse_2021_long %>% 
+  dplyr::rename(year = Year) %>% 
+  dplyr::filter(land_use == "cropland") %>% 
+  dplyr::full_join(landuse_2050 %>% 
+                     dplyr::select(year, subregionname, cropland_max) %>% 
+                     dplyr::rename(cropland = cropland_max) %>% 
+                     tidyr::pivot_longer(., cols = cropland, names_to = "land_use", values_to = "kha"), 
+                   by = c("year", "subregionname", "land_use", "kha")) 
+
+head(cropland_change)
+
+```
+
+```{r}
+ggplot(cropland_change, 
+       aes(x = year, 
+           y = kha)) + 
+  geom_line() + 
+  facet_wrap(~subregionname, 
+             scales = "free_y")
+```
+
+Food supply
+
+Calculate food supply from crops not used for other things.
+
+```{r}
+crop_prod_region <- crops_production %>% 
+  dplyr::filter(!is.na(element) & !is.na(crop_type) & !is.na(subregionname)) %>% 
+  dplyr::group_by(subregionname, crop_type, Year) %>% 
+  dplyr::summarise(production_tonnes = sum(value, na.rm = TRUE), 
+                   .groups = "drop")
+
+```
+
+Total population and food supply numbers.
+```{r}
+populations <- food_balance_data_defs %>% 
+  dplyr::filter(Item.Code == 2501 & Element.Code == 511) %>% #Population
+  dplyr::mutate(total_pop = Value*1e3) %>% 
+  dplyr::select(Area.Code, Area, Year, total_pop)
+
+food_supply_total <- food_balance_data_defs %>% 
+  dplyr::filter(Item.Code == 2901 & Element.Code == 664) %>% #Food supply (kcal/capita/day)
+  dplyr::mutate(kcal_cap_day = Value) %>% 
+  dplyr::select(Area.Code, Area, Year, kcal_cap_day)
+
+protein_supply_total <- food_balance_data_defs %>% 
+  dplyr::filter(Item.Code == 2901 & Element.Code == 674) %>% #Protein supply quantity (g/capita/day)
+  dplyr::mutate(g_cap_day = Value) %>% 
+  dplyr::select(Area.Code, Area, Year, g_cap_day)
+
+fat_supply_total <- food_balance_data_defs %>% 
+  dplyr::filter(Item.Code == 2901 & Element.Code == 684) %>% #Fat supply quantity (g/capita/day)
+  dplyr::mutate(g_cap_day = Value) %>% 
+  dplyr::select(Area.Code, Area, Year, g_cap_day)
+```
+
+Food supply numbers by model group.
+```{r}
+food_supply_modelgroup <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 664) %>% #Food supply (kcal/capita/day)
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(kcal_cap_day = sum(Value, 
+                                      na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::full_join(populations, 
+                   by = c("Area.Code", "Area", "Year")) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::mutate(kcal_day = kcal_cap_day*total_pop)
+
+protein_supply_modelgroup <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 674) %>% #Protein supply (g/capita/day)
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(g_cap_day = sum(Value, 
+                                      na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::full_join(populations, 
+                   by = c("Area.Code", "Area", "Year")) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::mutate(g_day = g_cap_day*total_pop)
+
+fat_supply_modelgroup <- food_balance_data_defs %>% 
+  dplyr::filter(Element.Code == 684) %>% #Fat supply (g/capita/day)
+  dplyr::group_by(Area.Code, Area, Year, model_group) %>% 
+  dplyr::summarise(g_cap_day = sum(Value, 
+                                      na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::full_join(populations, 
+                   by = c("Area.Code", "Area", "Year")) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::mutate(g_day = g_cap_day*total_pop)
+
+```
+
+
+We need to map the model-groups used here with the groups used in the EAT-Lancet planetary health diet.
+```{r}
+EATlancet_model_group_map <- data.frame(
+  model_group = c("alcohol", "aquaticmarine_product", "aves_dairy", "aves_meat", "beehive", "bovine_dairy", "bovine_meat", "caprine_meat", "cereal", "citrus", "fish_meat", "fish_other", "fruit", "oilcrop", "pulse", "rootstubers", "spices", "stimulants", "sugarcrop", "sus_meat", "treenut", "vegetable"), 
+  EATlancet_group = c(NA, NA, "eggs", "chicken_poultry", NA, "dairy", "beef_lamb_pork", "beef_lamb_pork", "whole_grains", "fruits", "fish", "fish", "fruits", "all_oils", "legumes", "tubers_starchy_vegetables", NA, NA, "all_sugars", "beef_lamb_pork", "nuts", "vegetables")
+)
+
+```
+
+Merge these data with Subregional areas.
+
+```{r}
+
+food_supply_modelgroup_regions <- food_supply_modelgroup %>% 
+  dplyr::rename(fao_countrycode = Area.Code) %>% 
+  dplyr::full_join(loc_map_reduced, 
+                   by = "fao_countrycode") %>% 
+  dplyr::group_by(subregionname, Year, model_group) %>% 
+  dplyr::summarise(kcal_day = sum(kcal_day, na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::left_join(EATlancet_model_group_map, 
+                   by = "model_group") %>% 
+  tidyr::drop_na()
+
+protein_supply_modelgroup_regions <- protein_supply_modelgroup %>% 
+  dplyr::rename(fao_countrycode = Area.Code) %>% 
+  dplyr::full_join(loc_map_reduced, 
+                   by = "fao_countrycode") %>% 
+  dplyr::group_by(subregionname, Year, model_group) %>% 
+  dplyr::summarise(g_day = sum(g_day, na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::left_join(EATlancet_model_group_map, 
+                   by = "model_group") %>% 
+  tidyr::drop_na()
+
+fat_supply_modelgroup_regions <- fat_supply_modelgroup %>% 
+  dplyr::rename(fao_countrycode = Area.Code) %>% 
+  dplyr::full_join(loc_map_reduced, 
+                   by = "fao_countrycode") %>% 
+  dplyr::group_by(subregionname, Year, model_group) %>% 
+  dplyr::summarise(g_day = sum(g_day, na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::left_join(EATlancet_model_group_map, 
+                   by = "model_group") %>% 
+  tidyr::drop_na()
+
+```
+
+
+
+
+
+```{r}
+
+model_group_kcal <- food_balance_data_defs %>% 
+  dplyr::filter(!is.na(model_group) & !is.na(Element) & Element.Code == 664) %>% 
+  dplyr::group_by(Area.Code, Area, model_group, Year) %>% 
+  dplyr::summarise(kcal_percap_perday = sum(Value, 
+                                            na.rm = TRUE)) %>% 
+  dplyr::ungroup()
+
+model_group_prot <- food_balance_data_defs %>% 
+  dplyr::filter(!is.na(model_group) & !is.na(Element) & Element.Code == 674) %>% 
+  dplyr::group_by(Area.Code, Area, model_group, Year) %>% 
+  dplyr::summarise(g_protein_percap_perday = sum(Value, 
+                                                 na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::ungroup()
+
+model_group_fats <- food_balance_data_defs %>% 
+  dplyr::filter(!is.na(model_group) & !is.na(Element) & Element.Code == 684) %>% 
+  dplyr::group_by(Area.Code, Area, model_group, Year) %>% 
+  dplyr::summarise(g_fat_percap_perday = sum(Value, 
+                                             na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::ungroup()
+
+```
+
