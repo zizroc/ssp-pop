@@ -1,0 +1,116 @@
+---
+title: "Geothermal energy supply"
+author: "Marcus J Thomson"
+date: "5/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readr)
+library(tidyr)
+```
+
+Data: [ThinkGeoEnergy](https://db.thinkgeoenergy.com/map_full) that provided a list of operating geothermal plants with capacities.
+
+```{r}
+
+geothermal <- readr::read_csv(file = "/home/thomson/Data/IEP_Model/data_iep_model/Think Geoenergy - Geothermal plants - db.csv")
+
+```
+
+
+```{r}
+geotherm <- geothermal %>% 
+  dplyr::mutate(capacity_installed_MWh = `Capacity Installed (MW)`*3600, 
+                capacity_annual_EJ = capacity_installed_MWh*(3.6e-9), 
+                type = Technology) %>% 
+  dplyr::select(iso3, type, capacity_installed_MWh, capacity_annual_EJ)
+
+head(geotherm)
+```
+
+
+```{r}
+
+readr::write_csv(geotherm, file = "~/Data/IEP_Model/data_iep_model/geothermal_capacity.csv")
+
+```
+
+
+```{r}
+geotherm_countries <- geotherm %>% 
+  left_join(
+  country_regions %>% 
+    dplyr::select(-Location), 
+  by = "iso3"
+)
+
+head(geotherm_countries)
+```
+
+Installed capacity should be greater than the numbers I have from PEC (demand). It should exceed real supply because no station will constantly produce at peak capacity and perfect efficiency. The difference in installed capacity and PEC from geothermal sources should give an idea of the relative downtime of geothermal plants by country. I test this below.
+
+```{r}
+
+geothermal_supply_2020 <- geotherm_countries %>% 
+  dplyr::group_by(SubRegName) %>% 
+  dplyr::summarise(capacity_installed_MWh = sum(capacity_installed_MWh, na.rm = TRUE),
+                   capacity_annual_EJ = sum(capacity_annual_EJ, na.rm = TRUE), 
+                   .groups = "drop") %>% 
+  dplyr::mutate(year = 2020, 
+                geothermal_supply_MJ = capacity_installed_MWh*(3.6e3)) %>% 
+  dplyr::select(SubRegName, geothermal_supply_MJ)
+
+```
+
+How does this compare to demand for geothermal by region in 2020? The last year for which I have PEC data is 2016, so let's use this.
+```{r}
+
+geothermal_demand_2016 <- pec_regions %>% 
+  dplyr::filter(year == 2016) %>% 
+  dplyr::select(SubRegName, geothermal, total) %>% 
+  dplyr::rename(geothermal_demand_MJ = geothermal)
+
+```
+
+It looks like a lot of the plants aren't online anywhere near the time they should be.
+
+```{r}
+downtime <- geothermal_demand_2016 %>% 
+  full_join(
+    geothermal_supply_2020, 
+    by = "SubRegName"
+  ) %>% 
+  dplyr::filter(!is.na(SubRegName)) %>% 
+  dplyr::mutate(geothermal_supply_MJ = ifelse(
+    !is.na(geothermal_supply_MJ), 
+    geothermal_supply_MJ/(3.6e3), 
+    0)) %>% 
+  dplyr::mutate(percent_diff = (geothermal_supply_MJ - geothermal_demand_MJ)/geothermal_demand_MJ) %>%
+  dplyr::arrange(percent_diff)
+downtime
+```
+
+```{r}
+ggplot(downtime %>% 
+             dplyr::filter(!SubRegName %in% c("Melanesia", "South America", "Caribbean", "Central Asia", "Micronesia", "Middle Africa", "Northern Africa", "Polynesia", "Southern Africa", "Southern Asia", "Western Africa")), 
+       aes(x = SubRegName, 
+           y = percent_diff)) + 
+  geom_col(alpha = 0.8) + 
+  cowplot::theme_minimal_hgrid() + 
+  theme(
+    plot.title = element_text(size = 14), 
+    axis.title.x = element_blank(), 
+    axis.text.x = element_text(angle = 90, size = 8, hjust = 0.9, vjust = 0)
+  ) + 
+  labs(
+    title = "Over-supply of geothermal supply (2016) from demand (2020)", 
+    subtitle = "Data: IEA & ThinkGeoenergy", 
+    y = "Percent difference"
+  ) + 
+  scale_y_continuous(labels = scales::percent_format())
+```
+
+Basically I think this scales with downtime at geothermal plants: the higher the numbers above, the higher the installed capacity is versus the primary energy consumed.

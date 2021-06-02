@@ -355,7 +355,7 @@ There is a discontinuity in the DER between ages 18 and 19, probably because of 
 fit_data <- ggplot_build(p1)$data[[2]]
 
 extracted_fit_data <- fit_data %>% 
-  mutate(gender = ifelse(linetype == "solid", 
+  dplyr::mutate(gender = ifelse(linetype == "solid", 
                          "female", 
                          "male"), 
          activity_level = ifelse(colour == "red", 
@@ -363,8 +363,8 @@ extracted_fit_data <- fit_data %>%
                                  ifelse(colour == "blue", 
                                         "moderate", 
                                         "light"))) %>% 
-  rename("age" = x, "kcal_perDay" = y) %>% 
-  select(gender, activity_level, age, kcal_perDay)
+  dplyr::rename("age" = x, "kcal_perDay" = y) %>% 
+  dplyr::select(gender, activity_level, age, kcal_perDay)
 
 # head(extracted_fit_data)
 
@@ -431,8 +431,8 @@ Now bin DER by the same age brackets as the population data.
 
 ```{r}
 fit_data_final <- interp_fit_data %>% 
-  group_by(gender, activity_level) %>% 
-  mutate(min_age = ifelse(
+  dplyr::group_by(gender, activity_level) %>% 
+  dplyr::mutate(min_age = ifelse(
     age < 5, 
     0, 
     ifelse(
@@ -555,8 +555,8 @@ fit_data_final <- interp_fit_data %>%
                                             99, 
                                             104))))))))))))))))))))) %>% 
   ungroup() %>% 
-  group_by(gender, activity_level, min_age, max_age) %>% 
-  summarise(kcal_mean = mean(kcal_interp), 
+  dplyr::group_by(gender, activity_level, min_age, max_age) %>% 
+  dplyr::summarise(kcal_mean = mean(kcal_interp), 
             .groups = "drop")
 
 head(fit_data_final)
@@ -567,9 +567,9 @@ Join the mean-AMDR and metabolic requirements data frames.
 ```{r}
 
 ssp_kcal <- ssp_world_long %>% 
-  full_join(fit_data_final, 
+  dplyr::full_join(fit_data_final, 
             by = c("gender", "min_age", "max_age")) %>% 
-  mutate(million_kcal_perDay = millions*kcal_mean)
+  dplyr::mutate(million_kcal_perDay = millions*kcal_mean)
 
 head(ssp_kcal)
 
@@ -802,7 +802,8 @@ kcal_deficit <- sum_ssp_kcal %>%
   dplyr::full_join(sum_ssp_kcal_edu, 
                    by = c("SCENARIO", "year")) %>% 
   dplyr::mutate(surplus = total_kcal_perDay - total_kcal_perDay2) %>% 
-  dplyr::select(SCENARIO, year, surplus)
+  dplyr::select(SCENARIO, year, surplus) %>% 
+  dplyr::filter(!is.na(SCENARIO))
 
 ```
 
@@ -912,18 +913,17 @@ p4_asia <- ggplot(ssp_kcal_edu_regions_summary %>%
   geom_hline(yintercept = 0, 
              alpha = 0.8, 
              size = 0.25) + 
-  labs(
-    x = "year"
-  ) + 
   facet_wrap(~SubRegName, 
-             ncol = 2) + 
+             ncol = 2, 
+             scales = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
     legend.position = "bottom", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_text(size = 8, angle = 0), 
-    axis.text.y = element_text(size = 6)
+    axis.text.y = element_text(size = 6), 
+    axis.title.x = element_blank()
   ) + 
   panel_border() + 
   scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
@@ -940,14 +940,16 @@ p4_africa <- ggplot(ssp_kcal_edu_regions_summary %>%
              alpha = 0.8, 
              size = 0.25) + 
   facet_wrap(~SubRegName, 
-             nrow = 3) + 
+             ncol = 2, 
+             scales = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
     legend.position = "bottom", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_text(size = 8, angle = 0), 
-    axis.text.y = element_text(size = 6)
+    axis.text.y = element_text(size = 6), 
+    axis.title.x = element_blank()
   ) + 
   panel_border() + 
   scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
@@ -964,14 +966,16 @@ p4_europe <- ggplot(ssp_kcal_edu_regions_summary %>%
              alpha = 0.8, 
              size = 0.25) + 
   facet_wrap(~SubRegName, 
-             ncol = 2) + 
+             ncol = 2, 
+             scales = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
     legend.position = "bottom", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_text(size = 8, angle = 0), 
-    axis.text.y = element_text(size = 6)
+    axis.text.y = element_text(size = 6), 
+    axis.title.x = element_blank()
   ) + 
   panel_border() + 
   scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
@@ -988,14 +992,16 @@ p4_newworld <- ggplot(ssp_kcal_edu_regions_summary %>%
              alpha = 0.8, 
              size = 0.25) + 
   facet_wrap(~SubRegName, 
-             ncol = 2) + 
+             ncol = 2, 
+             scales = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
     legend.position = "bottom", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_text(size = 8, angle = 0), 
-    axis.text.y = element_text(size = 6)
+    axis.text.y = element_text(size = 6), 
+    axis.title.x = element_blank()
   ) + 
   panel_border() + 
   scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
@@ -1012,14 +1018,16 @@ p4_oceania <- ggplot(ssp_kcal_edu_regions_summary %>%
              alpha = 0.8, 
              size = 0.25) + 
   facet_wrap(~SubRegName, 
-             ncol = 2) + 
+             ncol = 2, 
+             scales = "free_y") + 
   cowplot::theme_minimal_hgrid() + 
   theme(
     legend.position = "bottom", 
     legend.title = element_blank(), 
     strip.text.x = element_text(size = 8), 
     axis.text.x = element_text(size = 8, angle = 0), 
-    axis.text.y = element_text(size = 6)
+    axis.text.y = element_text(size = 6), 
+    axis.title.x = element_blank()
   ) + 
   panel_border() + 
   scale_y_continuous(name = "Percent difference from 2010 values", labels = scales::percent)
@@ -1128,7 +1136,7 @@ sum_ssp_kcal_edu_macronutrients <- ssp_kcal_edu_macronutrients %>%
 
 ```{r}
 
-ggplot(data = sum_ssp_kcal_edu_macronutrients, 
+p6 <- ggplot(data = sum_ssp_kcal_edu_macronutrients, 
        aes(x = year, 
            y = sum_mean_AMDR)) + 
   geom_line(aes(colour = nutrient), 
@@ -1163,18 +1171,29 @@ ggplot(data = sum_ssp_kcal_edu_macronutrients,
     y = "Mkcal per day"
   )
 
+p6
+
 ```
+
+```{r}
+sum_ssp_kcal_edu_macronutrients %>% 
+  dplyr::filter(SCENARIO == "SSP2_v9_130115") %>% 
+  dplyr::mutate(low_AMDR = sum_mean_AMDR - sum_range_AMDR, 
+                high_AMDR = sum_mean_AMDR + sum_range_AMDR)
+```
+
+
 
 ```{r}
 
 diff_ssp_kcal_edu_macronutrients <- sum_ssp_kcal_edu_macronutrients %>% 
-  dplyr::mutate(mean_AMDR_2010 = ifelse(year == 2010, 
+  dplyr::mutate(mean_AMDR_2020 = ifelse(year == 2020, 
                                         sum_mean_AMDR, 
                                         NA)) %>% 
   dplyr::group_by(SCENARIO, nutrient) %>% 
-  tidyr::fill(mean_AMDR_2010) %>% 
+  tidyr::fill(mean_AMDR_2020) %>% 
   ungroup() %>% 
-  dplyr::mutate(mean_AMDR_absdiff2010 = sum_mean_AMDR - mean_AMDR_2010) %>% 
+  dplyr::mutate(mean_AMDR_absdiff2020 = sum_mean_AMDR - mean_AMDR_2020) %>% 
   dplyr::filter(year %in% c(2050, 2075, 2100))
 
 diff_ssp_kcal_edu_macronutrients
@@ -1182,9 +1201,9 @@ diff_ssp_kcal_edu_macronutrients
 
 
 ```{r}
-ggplot(data = diff_ssp_kcal_edu_macronutrients, 
+p7 <- ggplot(data = diff_ssp_kcal_edu_macronutrients, 
        aes(x = as.factor(year), 
-           y = mean_AMDR_absdiff2010, 
+           y = mean_AMDR_absdiff2020, 
            fill = nutrient)) + 
   geom_bar(stat="identity",  
            position = "dodge", 
@@ -1218,17 +1237,74 @@ ggplot(data = diff_ssp_kcal_edu_macronutrients,
     axis.text = element_text(size = 11)
   ) + 
   labs(
-    title = "Difference in metabolic energy demand from 2010 by macronutrient", 
+    title = "Difference in metabolic energy demand from 2020 by macronutrient", 
     x = "year", 
     y = "Mkcal per day"
   )
+
+p7
 ```
 
 
 
 ```{r}
 
+p8 <- ggplot(data = diff_ssp_kcal_edu_macronutrients %>% 
+               dplyr::filter(SCENARIO == "SSP2_v9_130115"), 
+       aes(x = as.factor(year), 
+           y = mean_AMDR_absdiff2020*1e-6, 
+           fill = nutrient)) + 
+  geom_bar(stat="identity",  
+           position = "dodge", 
+           alpha = 0.9) + 
+  geom_hline(yintercept = 0, 
+             size = 0.25, 
+             alpha = 0.8) + 
+  # geom_errorbar(aes(ymin = mean_AMDR_absdiff2010 - sum_range_AMDR, 
+  #                   ymax = mean_AMDR_absdiff2010 + sum_range_AMDR, 
+  #                   color = nutrient), 
+  #               width = 0.5, 
+  #               position = position_dodge(0.9), 
+  #               alpha = 0.6) + 
+  # scale_colour_discrete(guide = FALSE) + 
+  scale_fill_brewer(name = "Macronutrient", 
+                      labels = c("carbohydrate", "protein", "fat"), 
+                      palette = "Set2") + 
+  # facet_wrap(~SCENARIO, 
+  #            labeller = as_labeller(
+  #              c("SSP1_v9_130115" = "SSP1", 
+  #                "SSP2_v9_130115" = "SSP2",
+  #                "SSP3_v9_130115" = "SSP3",
+  #                "SSP4d_v9_130115"= "SSP4",
+  #                "SSP5_v9_130115" = "SSP5"))) + 
+  theme_minimal_hgrid() + 
+  theme(
+    title = element_text(size = 12), 
+    legend.title = element_blank(), 
+    legend.position = "top", 
+    axis.title = element_text(size = 12), 
+    axis.text = element_text(size = 11), 
+    axis.title.x = element_blank()
+  ) + 
+  labs(
+    title = "Difference in metabolic energy demand from 2020 by macronutrient", 
+    x = "year", 
+    y = expression(10^12~kcal~day^-1)
+  )
 
+p8
 
 ```
+
+
+
+
+Planetary boundaries (Rochstrom et al.):
+Earth system process: | Control variable: | Boundary (uncertainty range):
+Climate change | GHG emissions | 5 Gt CO2e/y (4.7-5.4 Gt CO2e/y)
+Land-system change | Cropland use | 13 M km^2 (11-15 M km^2)
+Freshwater use | Water use | 2500 km^3/y (1000-4000 km^3/y)
+Nitrogen cycling | N application | 90 Tg N/y (65-90 Tg N/y, or 90-130 Tg N/y)
+Phosphorous cycling | P application | 8 Tg P/y (6-12 Tg P/y, or 8-16 Tg P/y)
+Biodiversity loss | Extinction rate | 10 E/MSY (1-80 E/MSY)
 

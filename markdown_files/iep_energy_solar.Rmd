@@ -62,5 +62,9 @@ The real issue with solar potential is how rapidly solar collectors, such as pho
 
 ```{r}
 
+irena_data <- read_csv(file = "~/Data/IEP_Model/data_iep_model/IRENA_data - data.csv")
+
+irena_data
+
 ```
 

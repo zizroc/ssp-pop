@@ -421,6 +421,8 @@ p1_oceania
 
 Start with a fossil fuel phase-out for all regions by 2050. This will require primary energy consumption (PEC) to be supplied by non-GHG producing sources by 2050, sufficient to supply the future energy demands for their populations. So let's consider how each of the SSP populations will influence demands, given average energy demands for X kWh per person per year for each region on average.
 
+2050: coal = 0.9*coal(2020); oil = 0.25*oil(2020); gas = 0.45*gas(2020)
+
 ```{r, echo = FALSE}
 
 # download.file(url = "https://api.worldbank.org/v2/en/indicator/EG.USE.ELEC.KH.PC?downloadformat=csv", destfile = "/home/thomson/Projects/iep_food/data/energy/world_bank/electric_power_consumption.csv")
@@ -1123,4 +1125,18 @@ Photovoltaic potential energy is vastly greater than demand in all countries ins
 
 ### Geothermal
 
+I found a database at [ThinkGeoEnergy](https://db.thinkgeoenergy.com/map_full) that provided a list of operating geothermal plants with capacities.
+
+```{r}
+
+geotherm <- readr::read_csv("~/Data/IEP_Model/data_iep_model/geothermal_capacity.csv")
+
+```
+
+
 emissions: 91 g CO2/kWh in Bloomfield, K.K., Moore, J.N. and Neilson, R.N., 2003. Geothermal energy reduces greenhouse gases. Geothermal Resources Council Bulletin, 32(2), pp.77-79.
+
+
+### Nuclear
+
+
