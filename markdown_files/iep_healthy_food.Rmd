@@ -226,6 +226,26 @@ head(av_der_adult)
 
 ```
 
+```{r}
+
+av_der1 <- av_der_child %>% 
+  dplyr::bind_rows(av_der_adult) %>% 
+  dplyr::mutate(Age_max = ifelse(Age_max == 999, 
+                                 99, 
+                                 Age_max)) %>% 
+  dplyr::mutate(Age_ave = 0.5*(Age_min + Age_max)) %>% 
+  dplyr::group_by(Age_ave, Gender, Activity_level) %>% 
+  dplyr::summarise(av_body_mass = mean(av_body_mass, 
+                                       na.rm = TRUE), 
+                   av_kcalPerDay = mean(av_kcalPerDay, 
+                                        na.rm = TRUE), 
+                   .groups = "drop")
+
+av_der1
+
+```
+
+
 Make a data frame with a row for each distinct year, gender, activity level group, then bin these into Age_min and Age_max columns as are used in the `av_der_child` and `av_der_adult` data sets. 
 
 ```{r}
@@ -331,7 +351,7 @@ p1 <- ggplot(data = der, aes(x = age, y = av_kcalPerDay)) +
   geom_smooth(aes(colour = Activity_level, 
                 linetype = Gender), 
               method = "loess", 
-              span = 0.1) + 
+              span = .1) + 
   scale_color_manual(values = c("light" = "green", 
                                 "moderate" = "blue", 
                                 "heavy" = "red")) + 
@@ -730,13 +750,50 @@ head(ssp_edu_long)
 
 ```
 
-
 ```{r}
+ssp1_kcal_edu <- ssp_edu_long %>% 
+  dplyr::filter(SCENARIO == "SSP1_v9_130115") %>% 
+  dplyr::full_join(fit_data_final, 
+                   by = c("gender", "min_age", "max_age", "activity_level")) 
 
 ssp2_kcal_edu <- ssp_edu_long %>% 
   dplyr::filter(SCENARIO == "SSP2_v9_130115") %>% 
   dplyr::full_join(fit_data_final, 
                    by = c("gender", "min_age", "max_age", "activity_level")) 
+
+ssp3_kcal_edu <- ssp_edu_long %>% 
+  dplyr::filter(SCENARIO == "SSP3_v9_130115") %>% 
+  dplyr::full_join(fit_data_final, 
+                   by = c("gender", "min_age", "max_age", "activity_level"))
+
+ssp4_kcal_edu <- ssp_edu_long %>% 
+  dplyr::filter(SCENARIO == "SSP4d_v9_130115") %>% 
+  dplyr::full_join(fit_data_final, 
+                   by = c("gender", "min_age", "max_age", "activity_level"))
+
+ssp5_kcal_edu <- ssp_edu_long %>% 
+  dplyr::filter(SCENARIO == "SSP5_v9_130115") %>% 
+  dplyr::full_join(fit_data_final, 
+                   by = c("gender", "min_age", "max_age", "activity_level"))
+```
+
+```{r}
+kcal_edu <- ssp1_kcal_edu %>% 
+  bind_rows(ssp2_kcal_edu) %>% 
+  bind_rows(ssp3_kcal_edu) %>% 
+  bind_rows(ssp4_kcal_edu) %>% 
+  bind_rows(ssp5_kcal_edu)
+
+head(kcal_edu)
+```
+
+
+```{r}
+
+# ssp2_kcal_edu <- ssp_edu_long %>% 
+#   dplyr::filter(SCENARIO == "SSP2_v9_130115") %>% 
+#   dplyr::full_join(fit_data_final, 
+#                    by = c("gender", "min_age", "max_age", "activity_level")) 
 
 head(ssp2_kcal_edu)
 
@@ -785,8 +842,7 @@ EATlancet_diet_wide <- EATlancet_diet_map %>%
 ```
 
 ```{r}
-
-ssp2_kcal_eatlancetdiet <- ssp2_kcal_edu %>% 
+ssp_kcal_eatlancetdiet <- kcal_edu %>% 
   dplyr::bind_cols(EATlancet_diet_wide) %>% 
   dplyr::mutate(
     eggs = eggs*kcal_mean*365*millions, 
@@ -803,7 +859,7 @@ ssp2_kcal_eatlancetdiet <- ssp2_kcal_edu %>%
     nuts = nuts*kcal_mean*365*millions, 
     vegetables = vegetables*kcal_mean*365*millions
     ) %>% 
-  dplyr::group_by(REGION, year) %>% 
+  dplyr::group_by(SCENARIO, REGION, year) %>% 
   dplyr::summarise(
     eggs = sum(eggs, na.rm = TRUE)*1e6, 
     chicken_poultry = sum(chicken_poultry, na.rm = TRUE)*1e6, 
@@ -821,18 +877,86 @@ ssp2_kcal_eatlancetdiet <- ssp2_kcal_edu %>%
     .groups = "drop"
   )
 
-head(ssp2_kcal_eatlancetdiet)
+
+head(ssp_kcal_eatlancetdiet)
+```
+
+
+
+```{r}
+
+# ssp2_kcal_eatlancetdiet <- ssp2_kcal_edu %>% 
+#   dplyr::bind_cols(EATlancet_diet_wide) %>% 
+#   dplyr::mutate(
+#     eggs = eggs*kcal_mean*365*millions, 
+#     chicken_poultry = chicken_poultry*kcal_mean*365*millions, 
+#     dairy = dairy*kcal_mean*365*millions, 
+#     beef_lamb_pork = beef_lamb_pork*kcal_mean*365*millions, 
+#     whole_grains = whole_grains*kcal_mean*365*millions, 
+#     fruits = fruits*kcal_mean*365*millions, 
+#     fish = fish*kcal_mean*365*millions, 
+#     all_oils = all_oils*kcal_mean*365*millions, 
+#     legumes = legumes*kcal_mean*365*millions, 
+#     tubers_starchy_vegetables = tubers_starchy_vegetables*kcal_mean*365*millions, 
+#     all_sugars = all_sugars*kcal_mean*365*millions, 
+#     nuts = nuts*kcal_mean*365*millions, 
+#     vegetables = vegetables*kcal_mean*365*millions
+#     ) %>% 
+#   dplyr::group_by(REGION, year) %>% 
+#   dplyr::summarise(
+#     eggs = sum(eggs, na.rm = TRUE)*1e6, 
+#     chicken_poultry = sum(chicken_poultry, na.rm = TRUE)*1e6, 
+#     dairy = sum(dairy, na.rm = TRUE)*1e6, 
+#     beef_lamb_pork = sum(beef_lamb_pork, na.rm = TRUE)*1e6, 
+#     whole_grains = sum(whole_grains, na.rm = TRUE)*1e6, 
+#     fruits = sum(fruits, na.rm = TRUE)*1e6, 
+#     fish = sum(fish, na.rm = TRUE)*1e6, 
+#     all_oils = sum(all_oils, na.rm = TRUE)*1e6, 
+#     legumes = sum(legumes, na.rm = TRUE)*1e6, 
+#     tubers_starchy_vegetables = sum(tubers_starchy_vegetables, na.rm = TRUE)*1e6, 
+#     all_sugars = sum(all_sugars, na.rm = TRUE)*1e6, 
+#     nuts = sum(nuts, na.rm = TRUE)*1e6, 
+#     vegetables = sum(vegetables, na.rm = TRUE)*1e6, 
+#     .groups = "drop"
+#   )
+# 
+# head(ssp2_kcal_eatlancetdiet)
 
 ```
 
+```{r}
+ loc_map <- readr::read_csv("~/Data/IEP_Model/data_iep_model/location_code_map_data.csv", 
+    col_types = cols(
+      Location   = col_character(), 
+      LocID      = col_number(), 
+      ISO3_Code  = col_character(), 
+      SubRegID   = col_number(), 
+      SubRegName = col_character(), 
+      Area.Code  = col_number(), 
+      Area       = col_character())
+  ) %>% 
+    dplyr::select(-X1) %>% 
+    drop_na()
+
+loc_map_reduced <- loc_map %>% 
+  dplyr::select(ISO3_Code, Area, Area.Code, LocID, SubRegID, SubRegName) %>% 
+  dplyr::rename(iso_alpha3      = ISO3_Code, 
+                countryname     = Area, 
+                fao_countrycode = Area.Code, 
+                un_countrycode  = LocID, 
+                subregioncode   = SubRegID, 
+                subregionname   = SubRegName) 
+```
+
+
 Now map the regions to subregional areas and filter by 2050 to see the target values (measured in kcal).
 ```{r}
-eatlancetdiet_target <- ssp2_kcal_eatlancetdiet %>% 
+eatlancetdiet_target <- ssp_kcal_eatlancetdiet %>% 
   dplyr::rename(iso_alpha3 = REGION) %>% 
   dplyr::full_join(loc_map_reduced %>% 
                      dplyr::select(iso_alpha3, subregionname), 
                    by = "iso_alpha3") %>% 
-  dplyr::group_by(year, subregionname) %>% 
+  dplyr::group_by(SCENARIO, year, subregionname) %>% 
   dplyr::summarise(
     eggs = sum(eggs, na.rm = TRUE), 
     chicken_poultry = sum(chicken_poultry, na.rm = TRUE), 
@@ -867,6 +991,14 @@ head(eatlancetdiet_target_long)
 The production of crops required to satisfy the EAT-Lancet Planetary Health diet target by 2050 is given in the following:
 
 ```{r}
+g_kcal_density <- EATlancet_diet_map %>% 
+  dplyr::mutate(g_kcal = g_day_ave/kcal_day) %>% 
+  dplyr::select(EATlancet_group, g_kcal)
+```
+
+Filter out animal and fish products for crops.
+
+```{r}
 eatlancetdiet_target_crops <- eatlancetdiet_target_long %>% 
   dplyr::filter(!EATlancet_group %in% c("eggs", "chicken_poultry", "dairy", "beef_lamb_pork", "fish")) %>% 
   dplyr::left_join(g_kcal_density, 
@@ -885,6 +1017,7 @@ g_kcal_density <- EATlancet_diet_map %>%
   dplyr::select(EATlancet_group, g_kcal)
 ```
 
+Only look at animal and fish products to reconstruct feed demand.
 
 ```{r}
 eatlancetdiet_target_animalprod <- eatlancetdiet_target_long %>% 
@@ -911,11 +1044,30 @@ eatlancetdiet_animalfeeds <- eatlancetdiet_target_animalprod %>%
   dplyr::left_join(fcr_map, 
                    by = "EATlancet_group") %>% 
   dplyr::mutate(feed_tonnes = tonnes*fcr) %>% 
-  dplyr::select(EATlancet_group, year, subregionname, feed_tonnes)
+  dplyr::select(SCENARIO, EATlancet_group, year, subregionname, feed_tonnes)
 
 head(eatlancetdiet_animalfeeds)
 ```
 What mixture of crops is used for feed?
+
+```{r}
+if(!exists("food_balance_data")){
+  food_balance_data <- read.csv(file = "~/Projects/iep_food/data/FAO/FoodBalanceSheetsHistoric_E_All_Data_(Normalized).csv", 
+                                header = TRUE, 
+                                stringsAsFactors = FALSE) %>% 
+    dplyr::filter(Year.Code >= 2000)
+}
+
+if(!exists("combined_item_group_mapper")){
+  source(file = "~/Projects/IEP_2/Model/R_files/Data_files/FAO_item_group_mapper.R") #combined_item_group_mapper
+}
+
+food_balance_data_defs <- food_balance_data %>% 
+  full_join(combined_item_group_mapper, 
+            by = c("Item.Code", "Item"))
+```
+
+
 ```{r}
 
 feed_regions <- food_balance_data_defs %>% 
@@ -970,6 +1122,7 @@ products_countries <- food_regions %>%
 
 ```
 
+According to FAO, quantities of agricultural products used for food, feed, seed, other uses, in processing, or lost are as follows:
 
 ```{r}
 
@@ -1132,6 +1285,25 @@ head(feed_regime)
 
 ```
 
+The FAO data does not include sufficient information for Micronesia, therefore, we pass the proportions from Melanesia to Micronesia.
+```{r}
+
+test <- feed_regime %>% 
+  dplyr::filter(subregionname == "Micronesia") 
+
+if(dim(test)[1] == 0) {
+  feed_regime_micronesia <- feed_regime %>% 
+  dplyr::filter(subregionname == "Melanesia") %>% 
+  dplyr::mutate(subregionname = "Micronesia")
+  
+  feed_regime <- feed_regime %>% 
+    dplyr::bind_rows(feed_regime_micronesia)
+  
+}
+
+```
+
+
 The following data frame should be read as: the quantity ('feed_ingredient' in tonnes) of each agricultural product class necessary to produce the target contents of the EAT-Lancet Planetary Health diet in 2050, according to regional human population estimates.
 
 ```{r}
@@ -1171,7 +1343,8 @@ eatlancetdiet_target_allprod <- eatlancetdiet_target_animalprod %>%
   dplyr::select(-kcal_yr, -g_kcal) %>% 
   dplyr::full_join(eatlancetdiet_target_crops %>% 
   dplyr::select(-kcal_yr, -g_kcal), 
-  by = c("year", "subregionname", "EATlancet_group", "tonnes"))
+  by = c("SCENARIO", "year", "subregionname", "EATlancet_group", "tonnes")) %>% 
+  dplyr::filter(!is.na(subregionname))
 
 ```
 
@@ -1179,7 +1352,7 @@ eatlancetdiet_target_allprod <- eatlancetdiet_target_animalprod %>%
 ```{r}
 
 eatlancetdiet_summary <- eatlancetdiet_animalfeeds_1 %>% 
-  dplyr::group_by(year, subregionname, feed_ingredient) %>% 
+  dplyr::group_by(SCENARIO, year, subregionname, feed_ingredient) %>% 
   dplyr::summarise(tonnes = sum(tonnes, na.rm = FALSE), 
                    .groups = "drop") %>% 
   dplyr::rename(food_group = feed_ingredient, 
@@ -1216,7 +1389,7 @@ eatlancetdiet_summary <- eatlancetdiet_animalfeeds_1 %>%
                                   EATlancet_group == "fish", 
                                   "fish_meat", 
                                   NA)))))))))))))), 
-    by = c("year", "subregionname", "food_group")
+    by = c("SCENARIO", "year", "subregionname", "food_group")
   ) %>% 
   dplyr::mutate_each(funs(replace(., which(is.na(.)), 0))) %>%
   dplyr::mutate(tonnes_total = tonnes_feed + tonnes_food)
@@ -1225,7 +1398,7 @@ head(eatlancetdiet_summary)
 
 ```
 
-A tropical livestock unit (TLU) is equivalent to 250 kg (liveweight). The following table is used for reference.
+A tropical livestock unit (TLU) is equivalent to 250 kg (liveweight). The following table is used for reference, and contains citations for the numbers used.
 
 ```{r}
 live_tlu_per_animal <- data.frame(
@@ -1258,7 +1431,8 @@ proc_per_animal <- data.frame(
 
 proc_per_animal
 ```
-Original crop weight prior to food/feed processing. This uses an assumed value chain loss of 32%.
+
+Original crop weight prior to food/feed processing. This uses an assumed total value chain loss of 32%, or 68% of the crop's harvest weight is maintained through the end of processing.
 ```{r}
 proc_per_crop <- data.frame(
   model_group = c("cereal", "pulse", "rootstubers", "fibercrop", "oilcrop", "citrus", "fruit", "vegetable", "sugarcrop", "treenut"), 
@@ -1266,9 +1440,10 @@ proc_per_crop <- data.frame(
   proc_to_harvest_weight_ratio = 0.68
 )
 
-proc_per_crop
+head(proc_per_crop)
 
 ```
+
 Merge these data frames to make a conversion chart. These numbers will be scaling factors to modify the crop and livestock food/feed products to generate original harvest/liveweight numbers.
 ```{r}
 
@@ -1293,41 +1468,48 @@ eatlancetdiet_summary_2 <- eatlancetdiet_summary %>%
   dplyr::mutate(crop_live_weight = ifelse(!is.na(scaling_factor), 
                                           tonnes_total/scaling_factor, 
                                           NA)) %>% 
-  dplyr::select(year, subregionname, food_group, crop_live_weight) %>% 
+  dplyr::select(SCENARIO, year, subregionname, food_group, crop_live_weight) %>% 
   tidyr::drop_na()
 
 head(eatlancetdiet_summary_2)
 ```
-Estimate livestock numbers from the herd average live weights, based on the 'live_tlu_per_animal' data and 250 kg per TLU.
+
+Estimate livestock numbers from the herd average live weights, based on the `live_tlu_per_animal` data and 250 kg per TLU.
 ```{r}
+
 herd_ave <- data.frame(
   food_group = c("aves_dairy", "aves_meat", "bovine_dairy", "bovine_meat", "caprine_dairy", "caprine_meat", "camelid_dairy", "camelid_meat", "equine_meat", "rodentia_meat", "sus_meat"), 
   TLU = c(0.01, 0.01, 1, 1, 0.09, 0.09, 1.13, 1.13, 0.75, 0.01, 0.2)
 ) %>% 
   dplyr::mutate(herd_av_t = 0.25*TLU)
+
+head(herd_ave)
+
 ```
 
 
-The result is the estimated head count of herd/flock sizes for each region. NB: The back-conversion of 'beef_lamb_pork' to 'bovine_meat' instead of caprine or sus, or any other meats, coerced all livestock to be represented as cattle. This was a conscious choice, as cattle will demand a maximum of land and water resources; but this could be redressed in future.
+The result is the estimated head count of herd/flock sizes for each region. NB: The back-conversion of 'beef_lamb_pork' to 'bovine_meat' instead of caprine or sus, or any other meats, coerced all livestock to be represented as cattle. This was a conscious choice, as cattle will demand a maximum of land and water resources, but could be revisited in future.
 ```{r}
+
 eatlancetdiet_summary_3 <- eatlancetdiet_summary_2 %>% 
   dplyr::left_join(herd_ave, 
                    by = "food_group") %>% 
   tidyr::drop_na() %>% 
   dplyr::mutate(head_av = crop_live_weight/herd_av_t) %>% 
-  dplyr::select(year, subregionname, food_group, head_av)
+  dplyr::select(SCENARIO, year, subregionname, food_group, head_av)
 
 head(eatlancetdiet_summary_3)
+
 ```
 
-Assuming that one cow requires approximately 4 ha of pasture (including fallow land for animals with feed-subsidized diets), one sheep/goat requires 0.4 ha, one pig 0.2 ha, and one chicken 0.01 ha, I estimate the livestock pasture demand to be as follows:
+Assuming that one cow requires approximately 2 ha of pasture (including fallow land for animals with feed-subsidized diets), one sheep/goat requires 0.4 ha, one pig 0.2 ha, and one chicken 0.01 ha, I estimate the livestock pasture demand to be as follows:
 
 ```{r}
 
 pasture_demand <- eatlancetdiet_summary_3 %>% 
   dplyr::mutate(pasture_ha = ifelse(
     food_group %in% c("bovine_dairy", "bovine_meat"), 
-    head_av*4, 
+    head_av*2, 
     ifelse(
       food_group %in% c("caprine_dairy", "caprine_meat"), 
       head_av*0.4, 
@@ -1340,97 +1522,15 @@ pasture_demand <- eatlancetdiet_summary_3 %>%
           0)))))
 
 pasture_demand_summary <- pasture_demand %>% 
-  dplyr::group_by(year, subregionname) %>% 
+  dplyr::group_by(SCENARIO, year, subregionname) %>% 
   dplyr::summarise(pasture_ha = sum(pasture_ha, na.rm = TRUE), 
                    .groups = "drop")
 
-pasture_demand_summary
-
-#TODO figure out what the NA subregionname was that became a 0 somewhere above
+head(pasture_demand_summary)
 
 ```
+
 #### Cropland demand
-
-We need to consider how the yield gap will have closed by 2050. The yield in 2050 will determine how much cropland is required to produce the necessary food/feed crops.
-
-```{r}
-
-eatlancetdiet_summary_2 %>% 
-  dplyr::filter(!food_group %in% c("aves_dairy", "bovine_dairy", "bovine_meat", "caprine_meat", "fish_meat", "fish_other", "sus_meat"))
-
-```
-
-
-```{r, echo=FALSE}
-
-yield_gaps <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/GYGA_yield_gaps - summary.csv") %>% 
-  dplyr::select(iep_subregions, management, model_group, YA, YP, `YP-YA`, CROPPING_INTENSITY)
-
-yield_gaps
-
-```
-
-
-```{r}
-
-value_chain_loss <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/Alexander_etal_2017_food_waste - summary.csv")
-
-```
-
-
-```{r}
-
-value_chain_loss_yield_gap <- value_chain_loss %>% 
-  tidyr::pivot_longer(., cols = cereal:treenut, names_to = "model_group", values_to = "value_chain_loss") %>% 
-  dplyr::full_join(yield_gaps, 
-                   by = c("iep_subregions", "model_group")) %>% 
-  dplyr::filter(model_group %in% c("cereal", "citrus", "fibercrop", "fruit", "oilcrop", "pulse", "rootstubers", "sugarcrop", "treenut", "vegetable"))
-
-head(value_chain_loss_yield_gap)
-
-```
-
-
-
-Production = cropping_intensity.YA.cropland_area.(1-value_loss); cropland_area = production/(cropping_intensity.YA.(1-value_loss))
-```{r}
-
-cropland_area_demand <- eatlancetdiet_summary_2 %>% 
-  dplyr::full_join(value_chain_loss_yield_gap %>% 
-                     dplyr::rename(subregionname = iep_subregions, 
-                                   food_group = model_group), 
-                   by = c("subregionname", "food_group")) %>% 
-  dplyr::filter(food_group %in% c("cereal", "citrus", "fibercrop", "fruit", "oilcrop", "pulse", "rootstubers", "sugarcrop", "treenut", "vegetable")) %>% 
-  tidyr::drop_na() %>% 
-  dplyr::mutate(
-    cropland_area = crop_live_weight/(CROPPING_INTENSITY*(1-value_chain_loss)*YA)
-  ) %>% 
-  dplyr::select(year, subregionname, food_group, management, cropland_area) %>% 
-  tidyr::pivot_wider(., names_from = management, values_from = cropland_area) %>% 
-  dplyr::rename(
-    irrigated_area_ha = irrigated, 
-    rainfed_area_ha = rainfed
-  )
-
-head(cropland_area_demand)
-
-```
-
-
-```{r}
-
-cropland_pasture_area_summary <- cropland_area_demand %>% 
-  dplyr::group_by(year, subregionname) %>% 
-  dplyr::summarise(irrigated_area_ha = sum(irrigated_area_ha, na.rm = TRUE), 
-                   rainfed_area_ha = sum(rainfed_area_ha, na.rm = TRUE), 
-                   .groups = "drop") %>% 
-  dplyr::full_join(pasture_demand_summary %>% 
-                     dplyr::filter(subregionname != 0), 
-                   by = c("year", "subregionname"))
-
-head(cropland_pasture_area_summary)
-
-```
 
 What is the present land-use area of these subregions?
 ```{r}
@@ -1453,6 +1553,8 @@ fao_landuse <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/Inputs_La
 6655 "Land under perm. meadows and pastures"
 6620 "Cropland"
 6633 "temporary pastures"
+
+From FAO the relevant land use data is as follows:
 
 ```{r}
 land_use_data <- fao_landuse %>% 
@@ -1497,7 +1599,7 @@ head(land_use_regions)
 
 ```
 
-These data represent FAOSTAT data for land-use from 2000 to 2018, so I label this explicitly.
+These data represent FAOSTAT data for land-use from 2000 to 2018, so let's label this explicitly.
 ```{r}
 land_use_2000to2018 <- land_use_regions
 
@@ -1574,7 +1676,8 @@ land_use_2000to2021 <- land_use_2000to2018 %>%
 head(land_use_2000to2021)
 
 ```
-Now compare how cropland and pasture land-use in 2021 compares with that projected for 2050, based on the EAT-Lancet Planetary Health diet. Units are 1000 ha.
+
+We are about to make comparisons to cropland and pasture demand projected for 2050 based on the EAT-Lancet PHD. But let's first organise our FAO-based data frames, including the extrapolated data points to 2021. (Units are 1000 ha.)
 ```{r}
 
 landarea_regions <- land_use_2000to2021 %>% 
@@ -1600,81 +1703,879 @@ head(landuse_2021_long)
 
 ```
 
+
+##### Yield gap
+
+We also need to consider how the yield gap will have closed by 2050. The yield in 2050 will determine how much cropland is required to produce the necessary food/feed crops.
+
+```{r}
+
+# eatlancetdiet_summary_2 %>% 
+#   dplyr::filter(!food_group %in% c("aves_dairy", "bovine_dairy", "bovine_meat", "caprine_meat", "fish_meat", "fish_other", "sus_meat"))
+
+```
+
+
+Load yield gap data based on the [Global Yield Gap Atlas](https://www.yieldgap.org). To produce these data, we used the available country-level data sets from GYGA to determine sub-regional averages for cereal, pulse, oilcrop, fibercrop, sugarcrop, treenut, citrus, fruit, rootstubers, and vegetable crop groups; and where data were incomplete, made inferences based on regions with similar climates and levels fo development. The complete list of inferences is found in the ReadMe accompanying the .csv file.
+```{r, echo=FALSE}
+
+yield_gaps <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/GYGA_yield_gaps - summary.csv") %>% 
+  dplyr::select(iep_subregions, management, model_group, YA, YP, `YP-YA`, CROPPING_INTENSITY)
+
+head(yield_gaps)
+
+```
+
+##### Loss due to post-harvest waste
+
+Value chain loss, based on data found in Alexander et al. (2017).
+
+Source: [Alexander, P., Brown, C., Arneth, A., Finnigan, J., Moran, D. and Rounsevell, M.D., 2017. Losses, inefficiencies and waste in the global food system. Agricultural systems, 153, pp.190-200.](https://doi.org/10.1016/j.agsy.2017.01.014)
+
+```{r}
+
+value_chain_loss <- readr::read_csv(file = "~/Data/IEP_Model/data_iep_model/Alexander_etal_2017_food_waste - summary.csv")
+
+```
+
+Merge value chain and yield gap data frames.
+```{r}
+
+value_chain_loss_yield_gap <- value_chain_loss %>% 
+  tidyr::pivot_longer(., cols = cereal:treenut, names_to = "model_group", values_to = "value_chain_loss") %>% 
+  dplyr::full_join(yield_gaps, 
+                   by = c("iep_subregions", "model_group")) %>% 
+  dplyr::filter(model_group %in% c("cereal", "citrus", "fibercrop", "fruit", "oilcrop", "pulse", "rootstubers", "sugarcrop", "treenut", "vegetable"))
+
+head(value_chain_loss_yield_gap)
+
+```
+
+TODO It looks like cereal cropland area demand is too great for Southern Asia
+
+TODO Find yields divided by YA and YP.
+
+Multiply by yield potential (YP), not present average yield (YA).
+Production = cropping_intensity.YP.cropland_area.(1-value_loss); cropland_area = production/(cropping_intensity.YP.(1-value_loss))
+```{r}
+
+cropland_area_demand <- eatlancetdiet_summary_2 %>% 
+  dplyr::full_join(value_chain_loss_yield_gap %>% 
+                     dplyr::rename(subregionname = iep_subregions, 
+                                   food_group = model_group), 
+                   by = c("subregionname", "food_group")) %>% 
+  dplyr::filter(food_group %in% c("cereal", "citrus", "fibercrop", "fruit", "oilcrop", "pulse", "rootstubers", "sugarcrop", "treenut", "vegetable")) %>% 
+  tidyr::drop_na()
+
+head(cropland_area_demand)
+
+```
+
 Let's also assume that the proportion of irrigated to rain-fed cropland remains roughly constant through 2050. How does this effect cropland demand in 2050?
 ```{r}
 irrigated_cropland_rel <- land_use_2000to2021 %>% 
   dplyr::filter(Year == 2021) %>% 
-  dplyr::mutate(cropland_irr_rel = abs(cropland_irr)/cropland, 
-                cropland_rfd_rel = abs(cropland_rfd)/cropland) %>% 
-  dplyr::select(Year, subregionname, cropland_irr_rel, cropland_rfd_rel)
+  dplyr::mutate(irrigated = abs(cropland_irr)/cropland, 
+                rainfed = abs(cropland_rfd)/cropland) %>% 
+  dplyr::select(Year, subregionname, irrigated, rainfed) %>% 
+  tidyr::pivot_longer(., cols = irrigated:rainfed, names_to = "management", values_to = "ratio")
 
-irrigated_cropland_rel
+head(irrigated_cropland_rel)
+```
+
+Merge these data frames (into `cropland_area_demand_2050_1`), then summarize over subregions (into `cropland_area_demand_2050_2`). The data frame `cropland_area_demand_2050_1` is separated from the summary data frame for the sake of transparency.
+```{r}
+
+cropland_area_demand_2050_1 <- cropland_area_demand %>% 
+  dplyr::full_join(irrigated_cropland_rel %>% 
+                     dplyr::select(-Year), 
+                   by = c("subregionname", "management")) %>% 
+  dplyr::mutate(
+    cropland_area_YA = crop_live_weight*ratio/(CROPPING_INTENSITY*(1-value_chain_loss)*YA), 
+    cropland_area_YP = crop_live_weight*ratio/(CROPPING_INTENSITY*(1-value_chain_loss)*YP)
+  )
+
+cropland_area_demand_2050_2 <- cropland_area_demand_2050_1 %>% 
+  dplyr::group_by(year, subregionname, food_group) %>% 
+  dplyr::summarise(cropland_area_YA = sum(cropland_area_YA, na.rm = TRUE), 
+                   cropland_area_YP = sum(cropland_area_YP, na.rm = TRUE), 
+                   ratio_check = sum(ratio, na.rm = TRUE), 
+                   .groups = "drop") %>% #just inserted to check that it is evaluating properly -- it is
+  dplyr::group_by(year, subregionname) %>% 
+  dplyr::summarise(cropland_area_YA = sum(cropland_area_YA, na.rm = TRUE), 
+                   cropland_area_YP = sum(cropland_area_YP, na.rm = TRUE), 
+                   .groups = "drop")
+
+head(cropland_area_demand_2050_1)
+head(cropland_area_demand_2050_2)
+
+```
+
+```{r}
+
+cropland_2000to2021 <- land_use_2000to2021 %>% 
+  dplyr::select(Year, subregionname, landarea, cropland) %>% 
+  dplyr::rename(year = Year)
+
+cropland_2050 <- cropland_area_demand_2050_2 %>% 
+  dplyr::mutate(cropland_area_YA = cropland_area_YA*1e-3, 
+                cropland_area_YP = cropland_area_YP*1e-3)
+
+head(cropland_2000to2021)
+head(cropland_2050)
+
+```
+
+Find yield gap closure points based on quartiles between YA and YP by 2050. That is, the following data frame imagines what the cropland area would be if the yield gaps (by subregion) were closed by 0% (equivalent to present yield average), 25%, 50%, 75%, and 100% (equivalent to potential yield) by 2050.
+```{r}
+
+cropland_2050_yieldgaps <- cropland_2050 %>% 
+  dplyr::mutate(
+    quartile_value = 0.25*(cropland_area_YP - cropland_area_YA), 
+    cropland_area_0thQuartYG = cropland_area_YA + quartile_value*0, 
+    cropland_area_1stQuartYG = cropland_area_YA + quartile_value*1, 
+    cropland_area_2ndQuartYG = cropland_area_YA + quartile_value*2, 
+    cropland_area_3rdQuartYG = cropland_area_YA + quartile_value*3, 
+    cropland_area_4thQuartYG = cropland_area_YP
+    ) 
+
+head(cropland_2050_yieldgaps)
+
 ```
 
 
-Cropland is defined in terms of 'cropland_min' (completely irrigated) and 'cropland_max' (completely rain-fed) demands; pasture is defined as above.
+Summarise these data into several time-series, based on different yield gap closures.
 ```{r}
 
-landuse_2050 <- cropland_pasture_area_summary %>% 
-  dplyr::mutate(
-    cropland_min = irrigated_area_ha*1e-3, 
-    cropland_max = rainfed_area_ha*1e-3, 
-    pasture = pasture_ha*1e-3
-  ) %>% 
-  dplyr::full_join(landarea_regions, 
+
+
+cropland_2000to2050_2021YG <- cropland_2000to2021 %>% 
+  dplyr::full_join(cropland_2050_yieldgaps %>% 
+                     dplyr::select(year, subregionname, cropland_area_0thQuartYG) %>% 
+                     dplyr::rename(cropland = cropland_area_0thQuartYG), 
+                   by = c("year", "subregionname", "cropland")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(yield_gap = "equal to 2021 YA in 2050")
+
+cropland_2000to2050_1stQuartYG <- cropland_2000to2021 %>% 
+  dplyr::full_join(cropland_2050_yieldgaps %>% 
+                     dplyr::select(year, subregionname, cropland_area_1stQuartYG) %>% 
+                     dplyr::rename(cropland = cropland_area_1stQuartYG), 
+                   by = c("year", "subregionname", "cropland")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(yield_gap = "YA plus first quartile in 2050")
+
+cropland_2000to2050_2ndQuartYG <- cropland_2000to2021 %>% 
+  dplyr::full_join(cropland_2050_yieldgaps %>% 
+                     dplyr::select(year, subregionname, cropland_area_2ndQuartYG) %>% 
+                     dplyr::rename(cropland = cropland_area_2ndQuartYG), 
+                   by = c("year", "subregionname", "cropland")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(yield_gap = "average of YA and YP in 2050")
+
+cropland_2000to2050_3rdQuartYG <- cropland_2000to2021 %>% 
+  dplyr::full_join(cropland_2050_yieldgaps %>% 
+                     dplyr::select(year, subregionname, cropland_area_3rdQuartYG) %>% 
+                     dplyr::rename(cropland = cropland_area_3rdQuartYG), 
+                   by = c("year", "subregionname", "cropland")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(yield_gap = "YA plus third quartile in 2050")
+
+cropland_2000to2050_YP <- cropland_2000to2021 %>% 
+  dplyr::full_join(cropland_2050_yieldgaps %>% 
+                     dplyr::select(year, subregionname, cropland_area_4thQuartYG) %>% 
+                     dplyr::rename(cropland = cropland_area_4thQuartYG), 
+                   by = c("year", "subregionname", "cropland")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(yield_gap = "maximum yield potential in 2050")
+
+cropland_2000to2050_2021YG
+cropland_2000to2050_1stQuartYG
+cropland_2000to2050_2ndQuartYG
+cropland_2000to2050_3rdQuartYG
+cropland_2000to2050_YP
+
+```
+
+What does the world look like with a yield gap closed?
+```{r}
+
+# no change in yield gap
+cropland_2021_1 <- cropland_2000to2050_2021YG %>% 
+  dplyr::filter(year == 2021) %>% 
+  dplyr::mutate(kha_2021 = cropland) %>% 
+  dplyr::select(subregionname, landarea, kha_2021) %>% 
+  tidyr::pivot_wider()
+
+# no change in yield gap
+cropland_2050_0Q <- cropland_2000to2050_2021YG %>% 
+  dplyr::filter(year == 2050) %>% 
+  dplyr::mutate(kha_2050_Qu0YG = cropland) %>% 
+  dplyr::select(subregionname, landarea, kha_2050_Qu0YG) %>% 
+  tidyr::pivot_wider()
+
+# first quartile improved yield gap
+cropland_2050_1Q <- cropland_2000to2050_1stQuartYG %>% 
+  dplyr::filter(year == 2050) %>% 
+  dplyr::mutate(kha_2050_Qu1YG = cropland) %>% 
+  dplyr::select(subregionname, landarea, kha_2050_Qu1YG) %>% 
+  tidyr::pivot_wider()
+
+# second quartile improved yield gap
+cropland_2050_2Q <- cropland_2000to2050_2ndQuartYG %>% 
+  dplyr::filter(year == 2050) %>% 
+  dplyr::mutate(kha_2050_Qu2YG = cropland) %>% 
+  dplyr::select(subregionname, landarea, kha_2050_Qu2YG) %>% 
+  tidyr::pivot_wider()
+
+# third quartile improved yield gap
+cropland_2050_3Q <- cropland_2000to2050_3rdQuartYG %>% 
+  dplyr::filter(year == 2050) %>% 
+  dplyr::mutate(kha_2050_Qu3YG = cropland) %>% 
+  dplyr::select(subregionname, landarea, kha_2050_Qu3YG) %>% 
+  tidyr::pivot_wider()
+
+# closed yield gap to full potential yield by 2050
+cropland_2050_4Q <- cropland_2000to2050_YP %>% 
+  dplyr::filter(year == 2050) %>% 
+  dplyr::mutate(kha_2050_Qu4YG = cropland) %>% 
+  dplyr::select(subregionname, landarea, kha_2050_Qu4YG) %>% 
+  tidyr::pivot_wider()
+
+cropland_2021and2050_wide <- cropland_2021_1  %>% 
+  full_join(cropland_2050_0Q, 
+            by = c("subregionname", "landarea")) %>% 
+  full_join(cropland_2050_1Q, 
+            by = c("subregionname", "landarea")) %>% 
+  full_join(cropland_2050_2Q, 
+            by = c("subregionname", "landarea")) %>% 
+  full_join(cropland_2050_3Q, 
+            by = c("subregionname", "landarea")) %>% 
+  full_join(cropland_2050_4Q, 
+            by = c("subregionname", "landarea"))
+
+head(cropland_2021and2050_wide)
+
+```
+
+Map the difference.
+
+```{r}
+library(sf)
+library(ggspatial)
+library(rnaturalearth)
+library(rnaturalearthdata)
+```
+
+
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+cropland_change_map <- world %>% 
+  dplyr::full_join(loc_map_reduced %>% 
+                     dplyr::rename(iso_a3 = iso_alpha3), 
+                   by = "iso_a3") %>% 
+  dplyr::full_join(cropland_2021and2050_wide, 
                    by = "subregionname")
 
-landuse_2050
+```
+
+```{r, quiet=TRUE}
+library(scales)
+```
+
+
+```{r}
+
+p_cropland_change_0 <- ggplot(data = cropland_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregion != "Antarctica" & subregionname != "South Asia")) + 
+  geom_sf(aes(fill = (kha_2050_Qu0YG/kha_2021)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Relative cropland expansion, 2021 to 2050", 
+    subtitle = "With average yield (YA) values unchanged", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_cropland_relative_0 <- ggplot(data = cropland_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregionname != "South Asia" & subregion != "Antarctica")) + 
+  geom_sf(aes(fill = (kha_2050_Qu0YG/landarea)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Cropland demand in 2050 relative to total area", 
+    subtitle = "With average yield (YA) values unchanged", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_cropland_change_0
+p_cropland_relative_0
 
 ```
 
-Difference in pasture between 2021 and 2050.
 ```{r}
 
-pasture_change <- landuse_2021_long %>% 
+p_cropland_change_2 <- ggplot(data = cropland_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregion != "Antarctica" & subregionname != "South Asia")) + 
+  geom_sf(aes(fill = (kha_2050_Qu2YG/kha_2021)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Relative cropland expansion, 2021 to 2050", 
+    subtitle = "With average yield (YA) values closed by 50%", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_cropland_relative_2 <- ggplot(data = cropland_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregionname != "South Asia" & subregion != "Antarctica")) + 
+  geom_sf(aes(fill = (kha_2050_Qu2YG/landarea)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Cropland demand in 2050 relative to total area", 
+    subtitle = "With average yield (YA) values closed by 50%", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_cropland_change_2
+p_cropland_relative_2
+
+```
+```{r}
+
+p_cropland_change_3 <- ggplot(data = cropland_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregion != "Antarctica" & subregionname != "South Asia")) + 
+  geom_sf(aes(fill = (kha_2050_Qu3YG/kha_2021)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Relative cropland expansion, 2021 to 2050", 
+    subtitle = "With average yield (YA) values closed by 75%", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_cropland_relative_3 <- ggplot(data = cropland_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregionname != "South Asia" & subregion != "Antarctica")) + 
+  geom_sf(aes(fill = (kha_2050_Qu3YG/landarea)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Cropland demand in 2050 relative to total area", 
+    subtitle = "With average yield (YA) values closed by 75%", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_cropland_change_3
+p_cropland_relative_3
+
+```
+
+
+Now, similarly for pasture, calculate the change ratios for pasture demand between 2021 and 2050, and the demand in 2050 compared to total land area for the region.
+```{r}
+
+pasture_2021_2050 <- land_use_2000to2021 %>% 
+  dplyr::select(Year, subregionname, landarea, pasture) %>% 
   dplyr::rename(year = Year) %>% 
-  dplyr::filter(land_use == "pasture") %>% 
-  dplyr::full_join(landuse_2050 %>% 
-                     dplyr::select(year, subregionname, pasture) %>% 
-                     tidyr::pivot_longer(., cols = pasture, names_to = "land_use", values_to = "kha"), 
-                   by = c("year", "subregionname", "land_use", "kha")) 
+  dplyr::filter(year == 2021) %>% 
+  dplyr::mutate(
+    landarea_ha = landarea*1e3, 
+    pasture_ha = pasture*1e3
+  ) %>% 
+  dplyr::select(year, subregionname, landarea_ha, pasture_ha) %>% 
+  dplyr::full_join(pasture_demand_summary, 
+                   by = c("year", "subregionname", "pasture_ha")) %>% 
+  dplyr::group_by(subregionname) %>% 
+  tidyr::fill(landarea_ha) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(
+    ratio = pasture_ha/landarea_ha
+  )
 
-head(pasture_change)
+head(pasture_2021_2050)
+
+```
+
+
+```{r}
+
+pasture_2021_2050_wide <- pasture_2021_2050 %>% 
+  dplyr::filter(year == 2021) %>% 
+  dplyr::rename(pasture_2021_ha = pasture_ha) %>% 
+  dplyr::select(-year, -ratio) %>% 
+  dplyr::full_join(pasture_2021_2050 %>% 
+                     dplyr::filter(year == 2050) %>% 
+                     dplyr::rename(pasture_2050_ha = pasture_ha) %>% 
+                     dplyr::select(-year, -landarea_ha, -ratio), 
+                   by = "subregionname")
+
+head(pasture_2021_2050_wide)
+
+```
+
+```{r}
+
+pasture_change_map <- world %>% 
+  dplyr::full_join(loc_map_reduced %>% 
+                     dplyr::rename(iso_a3 = iso_alpha3), 
+                   by = "iso_a3") %>% 
+  dplyr::full_join(pasture_2021_2050_wide, 
+                   by = "subregionname")
+
+```
+
+
+```{r}
+
+p_pasture_change <- ggplot(data = pasture_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregion != "Antarctica")) + 
+  geom_sf(aes(fill = (pasture_2050_ha/pasture_2021_ha)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Relative pasture expansion, 2021 to 2050", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+p_pasture_relative <- ggplot(data = pasture_change_map %>% 
+         dplyr::filter(!is.na(subregionname) & subregion != "Antarctica")) + 
+  geom_sf(aes(fill = (pasture_2050_ha/landarea_ha)), lwd = 0) + 
+  theme_minimal() + 
+  theme(
+    panel.background = element_rect(fill = muted("blue", l = 90, c = 50)), 
+    legend.title = element_blank()
+  ) + 
+  coord_sf(datum = NA) + 
+  # coord_sf(crs = "+proj=laea +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs") + 
+  labs(
+    title = "Pasture demand in 2050 relative to total area", 
+    fill = "ratio"
+  ) + 
+  scale_fill_gradient(low = "white", high = muted("red")) 
+
+# p_pasture_change
+# p_pasture_relative
+
+```
+
+
+```{r}
+
+cowplot::plot_grid(p_cropland_change_3, p_pasture_change, p_cropland_relative_3, p_pasture_relative, ncol = 2, align = "vh")
+
+```
+
+```{r}
+
+dat1 <- cropland_2021and2050_wide %>% 
+  mutate(
+    ratio1_0 = kha_2050_Qu0YG/kha_2021, 
+    ratio1_1 = kha_2050_Qu1YG/kha_2021, 
+    ratio1_2 = kha_2050_Qu2YG/kha_2021, 
+    ratio1_3 = kha_2050_Qu3YG/kha_2021, 
+    ratio1_4 = kha_2050_Qu4YG/kha_2021, 
+    ratio2_0 = kha_2050_Qu1YG/landarea, 
+    ratio2_1 = kha_2050_Qu1YG/landarea, 
+    ratio2_2 = kha_2050_Qu2YG/landarea, 
+    ratio2_3 = kha_2050_Qu3YG/landarea, 
+    ratio2_4 = kha_2050_Qu4YG/landarea
+  )
+
+dat2 <- pasture_2021_2050_wide %>% 
+  mutate(ratio1 = pasture_2050_ha/pasture_2021_ha, 
+         ratio2 = pasture_2050_ha/landarea_ha)
+
+head(dat1)
+head(dat2)
 
 ```
 ```{r}
-ggplot(pasture_change, 
-       aes(x = year, 
-           y = kha)) + 
-  geom_line() + 
-  facet_wrap(~subregionname, 
-             scales = "free_y")
+dat1_long <- dat1 %>% 
+  dplyr::select(subregionname, ratio1_0, ratio1_1, ratio1_2, ratio1_3, ratio1_4) %>% 
+  tidyr::pivot_longer(., cols = ratio1_0:ratio1_4)
+
+dat1_long
+
+dat1a_long <- dat1 %>% 
+  dplyr::select(subregionname, ratio2_0, ratio2_1, ratio2_2, ratio2_3, ratio2_4) %>% 
+  tidyr::pivot_longer(., cols = ratio2_0:ratio2_4)
+
+dat1a_long
 ```
 
-Difference between cropland in 2021 and maximum cropland demand (100% rainfed) in 2050.
+
 ```{r}
 
-cropland_change <- landuse_2021_long %>% 
-  dplyr::rename(year = Year) %>% 
-  dplyr::filter(land_use == "cropland") %>% 
-  dplyr::full_join(landuse_2050 %>% 
-                     dplyr::select(year, subregionname, cropland_max) %>% 
-                     dplyr::rename(cropland = cropland_max) %>% 
-                     tidyr::pivot_longer(., cols = cropland, names_to = "land_use", values_to = "kha"), 
-                   by = c("year", "subregionname", "land_use", "kha")) 
+p_cropland_change_1a <- ggplot(data = dat1_long, 
+       aes(x = reorder(subregionname, -value), 
+           y = value)) + 
+  geom_col(aes(fill = name), 
+           position = "dodge", 
+           colour = "black", 
+           size = 0.2) + 
+  geom_hline(yintercept = 1, alpha = 0.8) + 
+  theme_minimal_vgrid() + 
+  theme(
+    legend.position = "top", 
+    legend.title = element_text(size = 11), 
+    legend.text = element_text(size = 10), 
+    axis.text.x = element_text(angle = 90, size = 8, hjust = 1, vjust = 0.5), 
+    axis.title.y = element_text(size = 11), 
+    axis.text.y = element_text(size = 10), 
+    axis.ticks.x = element_blank(), 
+    panel.grid = element_line(size = 8)
+  ) + 
+  labs(
+    x = "", 
+    y = "Cropland area growth from 2021"
+  ) + 
+  scale_y_log10() + 
+  scale_fill_brewer(palette=3, 
+                    labels = c("0% YG", "25% YG", "50% YG", "75% YG", "100% YG"), 
+                    name = "Proportion of yield gap closed")
 
-head(cropland_change)
+p_cropland_change_1a
 
 ```
 
 ```{r}
-ggplot(cropland_change, 
-       aes(x = year, 
-           y = kha)) + 
-  geom_line() + 
-  facet_wrap(~subregionname, 
-             scales = "free_y")
+
+p_cropland_relative_1b <- ggplot(data = dat1a_long, 
+       aes(x = reorder(subregionname, -value), 
+           y = value)) + 
+  geom_col(aes(fill = name), 
+           position = "dodge", 
+           colour = "black", 
+           size = 0.2) + 
+  geom_hline(yintercept = 1, alpha = 0.8, linetype = 2) + 
+  theme_minimal_vgrid() + 
+  theme(
+    legend.position = "top", 
+    legend.title = element_text(size = 11), 
+    legend.text = element_text(size = 10), 
+    axis.text.x = element_text(angle = 90, size = 8, hjust = 1, vjust = 0.5), 
+    axis.title.y = element_text(size = 11), 
+    axis.text.y = element_text(size = 9), 
+    axis.ticks.x = element_blank(), 
+    panel.grid = element_line(size = 8)
+  ) + 
+  labs(
+    x = "", 
+    y = "Cropland area to country area"
+  ) + 
+  scale_y_continuous(labels = scales::percent) + 
+  scale_fill_brewer(palette=3, 
+                    labels = c("0% YG", "25% YG", "50% YG", "75% YG", "100% YG"), 
+                    name = "Proportion of yield gap closed")
+
+p_cropland_relative_1b
+
 ```
+
+```{r}
+
+dat1_long_update <- dat1_long %>% 
+  separate(name, c("ratio", "yp"), "_")
+
+tmp <- dat1a_long %>% 
+  separate(name, c("ratio", "yp"), "_")
+
+cropland_ratios_dat <- dat1_long_update %>% 
+  dplyr::bind_rows(tmp) %>% 
+  dplyr::mutate(ratio = ifelse(ratio == "ratio1", 
+                               "2050 cropland : 2021 cropland", 
+                               "2050 cropland : total area"))
+```
+
+```{r}
+
+
+breaks <- 10^(-10:10)
+minor_breaks <- rep(1:9, 21)*(10^rep(-10:10, each=9))
+
+p_cropland_ratios <- ggplot(data = cropland_ratios_dat, 
+       aes(x = reorder(subregionname, value), 
+           y = value)) + 
+  geom_col(aes(fill = yp), 
+           position = "dodge", 
+           colour = "black", 
+           size = 0.2) + 
+  geom_hline(yintercept = 1) + 
+  theme_minimal() + 
+  theme(
+   legend.position = "top", 
+    legend.title = element_text(size = 11), 
+    legend.text = element_text(size = 10), 
+   axis.title.x = element_blank(), 
+    axis.text.x = element_text(angle = 90, size = 8, hjust = 1, vjust = 0.5), 
+    axis.title.y = element_blank(), 
+    axis.text.y = element_text(size = 9), 
+    axis.ticks.x = element_blank(), 
+    panel.border = element_rect(colour = "black", size = 0.5, fill = NA) 
+   # panel.grid.major.x = element_line(size = 4)
+  ) + 
+   labs(
+    # title = "Pasture", 
+    # subtitle = "Log ratio of pasture area demand in 2050 to 2021", 
+    # y = expression(10^n)
+  ) + 
+  scale_fill_brewer(palette=3, 
+                    labels = c("0%", "25%", "50%", "75%", "100%"), 
+                    name = "Proportion of yield gap closed") + 
+  scale_y_log10(breaks = breaks, minor_breaks = minor_breaks, labels = trans_format("log10", math_format(10^.x))) +
+  # coord_flip() + 
+  facet_wrap(~ratio, 
+             nrow = 2)
+
+p_cropland_ratios
+```
+
+
+```{r}
+p_cropland_change_1 <- ggplot(data = dat1_long, 
+       aes(x = reorder(subregionname, -value), 
+           y = value)) + 
+  geom_col(aes(fill = name), 
+           position = "dodge", 
+           colour = "black", 
+           size = 0.2) + 
+  geom_hline(yintercept = 1, alpha = 0.8) + 
+  theme_minimal_vgrid() + 
+  theme(
+    legend.position = "top", 
+    legend.title = element_text(size = 11), 
+    legend.text = element_text(size = 10), 
+    axis.text.x = element_text(angle = 90, size = 8, hjust = 1, vjust = 0.5), 
+    axis.title.x = element_blank(), 
+    axis.title.y = element_text(size = 11), 
+    axis.text.y = element_text(size = 10), 
+    axis.ticks.x = element_blank(), 
+    panel.grid = element_line(size = 8)
+  ) + 
+  scale_y_log10() + 
+  scale_fill_brewer(palette=3, 
+                    labels = c("0% YG", "25% YG", "50% YG", "75% YG", "100% YG"), 
+                    name = "Proportion of yield gap closed")
+
+p_cropland_change_1
+```
+
+
+```{r}
+cropland_abs_differences <- dat1 %>% 
+  dplyr::select(subregionname, landarea, kha_2021, kha_2050_Qu0YG, kha_2050_Qu1YG, kha_2050_Qu2YG, kha_2050_Qu3YG, kha_2050_Qu4YG) %>% 
+  tidyr::pivot_longer(., cols = kha_2050_Qu0YG:kha_2050_Qu4YG) %>% 
+  tidyr::separate(name, c("kha_2050", "YG"), "_Qu") %>% 
+  dplyr::mutate(kha_2050 = value, 
+                diff_kha = kha_2050 - kha_2021) %>% 
+  dplyr::select(-value)
+
+cropland_abs_differences
+
+
+cropland_abs_differences_regions <- cropland_abs_differences %>% 
+  dplyr::group_by(YG) %>% 
+  dplyr::summarise(landarea = sum(landarea), 
+                   kha_2021 = sum(kha_2021), 
+                   kha_2050 = sum(kha_2050), 
+                   diff_kha = sum(diff_kha)*1e-6, 
+                   .groups = "drop") %>% 
+  dplyr::mutate(landarea_ratio_2050 = kha_2050/landarea) %>% 
+  dplyr::select(YG, diff_kha, landarea_ratio_2050) %>% 
+  tidyr::pivot_longer(., cols = diff_kha:landarea_ratio_2050) %>% 
+  dplyr::mutate(unit = ifelse(name == "diff_kha", 
+                              "Gha", 
+                              "unitless"), 
+                label = ifelse(name == "diff_kha", 
+                               "2050 crop area - 2021 crop area", 
+                               "Ratio to total land area"))
+
+cropland_abs_differences_regions
+```
+
+```{r}
+
+breaks <- 10^(-10:10)
+minor_breaks <- rep(1:9, 21)*(10^rep(-10:10, each = 9))
+
+p_cropland_abs_differences_regions <- ggplot(data = cropland_abs_differences_regions, 
+       aes(x = 1, 
+           y = value)) + 
+  geom_col(aes(fill = YG), 
+           position = "dodge", 
+           colour = "black", 
+           size = 0.2) + 
+  theme_minimal() + 
+  theme(
+   legend.position = "top", 
+   legend.title = element_text(size = 11), 
+   legend.text = element_text(size = 10), 
+   axis.text.x = element_blank(), 
+   axis.text.y = element_text(size = 9), 
+   axis.ticks.x = element_blank(), 
+   panel.border = element_rect(colour = "black", size = 0.5, fill = NA), 
+   panel.grid.major.x = element_blank(), 
+   panel.grid.minor.x = element_blank()
+  ) + 
+   labs(
+    # title = "Pasture", 
+    # subtitle = "Log ratio of pasture area demand in 2050 to 2021", 
+    x = "World"
+  ) + 
+  scale_fill_brewer(palette=3, 
+                    labels = c("0% YG", "25% YG", "50% YG", "75% YG", "100% YG"), 
+                    name = "Proportion of yield gap closed") + 
+  facet_wrap(~label, 
+             nrow = 2)
+# + 
+#   scale_y_log10(breaks = breaks, minor_breaks = minor_breaks, labels = trans_format("log10", math_format(10^.x)))
+
+p_cropland_abs_differences_regions
+
+```
+
+
+```{r}
+dat2_long <- dat2 %>% 
+  dplyr::select(subregionname, ratio1, ratio2) %>% 
+  tidyr::pivot_longer(., cols = ratio1:ratio2) %>% 
+  dplyr::mutate(name = ifelse(name == "ratio1", "2050 pasture : 2021 pasture", "2050 pasture : total area"))
+```
+
+```{r}
+breaks <- 10^(-10:10)
+minor_breaks <- rep(1:9, 21)*(10^rep(-10:10, each=9))
+
+p_pasture_ratios <- ggplot(data = dat2_long, 
+       aes(x = reorder(subregionname, value), 
+           y = value)) + 
+  geom_col() + 
+  geom_hline(yintercept = 1) + 
+  theme_minimal() + 
+  theme(
+    axis.text.y = element_text(size = 9), 
+    axis.title.y = element_blank(), 
+    axis.text.x = element_text(angle = 90, size = 8, hjust = 1, vjust = 0.5), 
+    axis.title.x = element_blank(), 
+    axis.ticks.y = element_blank(), 
+    panel.border = element_rect(colour = "black", size = 0.5, fill = NA) 
+  ) + 
+   labs(
+    # title = "Pasture", 
+    # subtitle = "Log ratio of pasture area demand in 2050 to 2021", 
+    # y = expression(10^n)
+  ) + 
+  scale_y_log10(breaks = breaks, minor_breaks = minor_breaks, labels = trans_format("log10", math_format(10^.x))) + 
+  # coord_flip() + 
+  facet_wrap(~name, 
+             nrow = 2)
+
+p_pasture_ratios
+```
+
+
+```{r}
+
+ggplot(data = dat2, 
+       aes(x = reorder(subregionname, -ratio1), 
+           y = (ratio1))) + 
+  geom_col() + 
+  geom_hline(yintercept = 1) + 
+  theme(
+    axis.text.y = element_text(size = 6), 
+    axis.title.y = element_blank(), 
+    axis.title.x = element_text(size = 10)
+  ) + 
+  labs(
+    title = "Pasture", 
+    subtitle = "Log ratio of pasture area demand in 2050 to 2021", 
+    y = expression(10^n)
+  ) + 
+  scale_y_log10() + 
+  coord_flip()
+
+ggplot(data = dat2, 
+       aes(x = reorder(subregionname, -ratio1), 
+           y = (ratio2))) + 
+  geom_col() + 
+  geom_hline(yintercept = 1) + 
+  theme(
+    axis.text.y = element_text(size = 6), 
+    axis.title.y = element_blank(), 
+    axis.title.x = element_text(size = 10)
+  ) + 
+  labs(
+    title = "Pasture", 
+    subtitle = "Log ratio of pasture area demand in 2050 to regional land area", 
+    y = expression(10^n)
+  ) + 
+  scale_y_log10() + 
+  coord_flip()
+
+```
+
+
+
+# Trade to balance crop and pasture demand with land use commitments
+
+TODO This later.
+
+
+
 
 Food supply
 
