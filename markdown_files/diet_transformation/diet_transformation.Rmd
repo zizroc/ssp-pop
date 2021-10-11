@@ -245,6 +245,11 @@ Food_countries <- food_countries %>%
   dplyr::rename(fao_countrycode = area_code) %>% 
   dplyr::select(-area) %>% 
   dplyr::left_join(loc_map_reduced, by = "fao_countrycode")
+
+Feed_countries <- feed_countries %>% 
+  dplyr::rename(fao_countrycode = area_code) %>% 
+  dplyr::select(-area) %>% 
+  dplyr::left_join(loc_map_reduced, by = "fao_countrycode")
 ```
 
 Do some cleanup first because some ISOa3 codes are not included.
@@ -252,29 +257,59 @@ Do some cleanup first because some ISOa3 codes are not included.
 food_2014_2018_data <- Food_countries %>%
   dplyr::select(year, model_group, tonnes_yr, iso_alpha3) %>%
   tidyr::drop_na()
+
+feed_2014_2018_data <- Feed_countries %>%
+  dplyr::select(year, model_group, tonnes_yr, iso_alpha3) %>%
+  tidyr::drop_na()
 ```
 
-Fit linear models to data and predict to extrapolate to 2022.
+Fit linear models to data and predict to extrapolate to 2022. NB: In some cases, the fitter projects negative production values. These are zeroed out.
 ```{r}
 yrs <- data.frame(year = seq(2019, 2022, by = 1))
 
 food_2019_2022_lm <- food_2014_2018_data %>%
   dplyr::group_by(iso_alpha3, model_group) %>%
   tidyr::nest() %>%
-  dplyr::mutate(models = lapply(data, function(df) lm(tonnes_yr ~ year, data = df))) %>% 
-  dplyr::mutate(lm_pred = map(models, ~predict(., yrs))) %>% 
+  dplyr::mutate(models = lapply(data, function(df)
+    lm(tonnes_yr ~ year, data = df))) %>%
+  dplyr::mutate(lm_pred = map(models, ~ predict(., yrs))) %>%
   # dplyr::mutate(lm_pred = map(models, ~predict(., yrs))) %>%
-  dplyr::ungroup() %>% 
-  tidyr::unnest(cols = c(lm_pred)) %>% 
-  dplyr::select(iso_alpha3, model_group, lm_pred) %>% 
-  dplyr::mutate(year = rep(seq(2019, 2022, by = 1), 2212)) %>% 
-  dplyr::rename(tonnes_yr = lm_pred)
+  dplyr::ungroup() %>%
+  tidyr::unnest(cols = c(lm_pred)) %>%
+  dplyr::select(iso_alpha3, model_group, lm_pred) %>%
+  dplyr::mutate(year = rep(seq(2019, 2022, by = 1), 2212)) %>%
+  dplyr::rename(tonnes_yr = lm_pred) %>%
+  dplyr::mutate(tonnes_yr = ifelse(tonnes_yr < 0, 0, tonnes_yr))
  
 ```
+
+Do something similar for feed: mean values are fine -- the fitter is throwing rank-deficient fit warnings from some instances.
+```{r}
+# feed_2019_2022_lm <- feed_2014_2018_data %>%
+#   dplyr::group_by(iso_alpha3, model_group) %>%
+#   tidyr::nest() %>%
+#   dplyr::mutate(models = lapply(data, function(df) lm(tonnes_yr ~ year, data = df))) %>% 
+#   dplyr::mutate(lm_pred = map(models, ~predict(., yrs))) %>% 
+#   # dplyr::mutate(lm_pred = map(models, ~predict(., yrs))) %>%
+#   dplyr::ungroup() %>% 
+#   tidyr::unnest(cols = c(lm_pred)) %>% 
+#   dplyr::select(iso_alpha3, model_group, lm_pred) %>% 
+#   dplyr::mutate(year = rep(seq(2019, 2022, by = 1), 1343)) %>% 
+#   dplyr::rename(tonnes_yr = lm_pred)
+
+feed_2019_2022_lm <- feed_2014_2018_data %>% 
+  dplyr::group_by(iso_alpha3, model_group) %>% 
+  dplyr::summarise(tonnes_yr = mean(tonnes_yr, na.rm = TRUE), 
+                   .groups = "drop")
+```
+
 
 ```{r}
 food_2014_2022_est <- food_2014_2018_data %>% 
   bind_rows(food_2019_2022_lm)
+
+feed_2014_2022_est <- feed_2014_2018_data %>% 
+  bind_rows(feed_2019_2022_lm)
 ```
 
 Use crop weight of food and crop ingredient weight of feed from earlier. We will only use the data for years 2023 and after.
@@ -354,7 +389,15 @@ feed_proj <- feed_ingredient_demand_summary %>%
 # feed_proj
 ```
 
+Set a target year
+```{r}
+netzero_target_year <- 2050
+```
+
+
 Confirm continuity between ISO codes so countries represented in 2022 are there in 2023, etc. Fill dummy values in for scenario and diet_plan for the FAO data. These are required for continuity in the spline fitter.
+
+### For food pathways
 ```{r}
 years_tmp <- food_2014_2022_est %>% distinct(year) %>% pull(year)
 countries_tmp <- food_2014_2022_est %>% distinct(iso_alpha3) %>% pull(iso_alpha3)
@@ -368,17 +411,16 @@ names(empty_set) <- c("year", "iso_alpha3", "model_group", "diet_plan", "scenari
 
 ```
 
-Fill NA values with a small value of 0.1 tonnes so the spline fitter has tie points
 ```{r}
 food_2014_2022_est_tmp <- food_2014_2022_est %>%
   full_join(empty_set, by = c("year", "model_group", "iso_alpha3")) %>%
-  mutate(tonnes_yr = ifelse(is.na(tonnes_yr), 1000, tonnes_yr))
+  mutate(tonnes_yr = ifelse(is.na(tonnes_yr), 0, tonnes_yr))
 
 ```
 
 Do the same for `pathways` data frame representing values between 2023 and the target year to be filled by the spline values.
 ```{r}
-years_tmp <- seq(2023, 2049, by = 1)
+years_tmp <- seq(2023, netzero_target_year - 1, by = 1)
 countries_tmp <- food_2014_2022_est %>% distinct(iso_alpha3) %>% pull(iso_alpha3)
 model_groups_tmp <- food_2014_2022_est %>% distinct(model_group) %>% pull(model_group)
 diet_plans_tmp <- c("CNS-CFP", "ELA-PHD",  "FDA-SDP")
@@ -391,15 +433,15 @@ names(pathways_tmp) <- c("year", "iso_alpha3", "model_group", "diet_plan", "scen
 
 Merge the FAO-derived data with the empty pathways data frame.
 ```{r}
-data_pathways <- food_2014_2022_est_tmp %>% 
+food_data_pathways <- food_2014_2022_est_tmp %>% 
   full_join(pathways_tmp, by = c("year", "model_group", "tonnes_yr", "iso_alpha3", "diet_plan", "scenario"))
 
-head(data_pathways)
+head(food_data_pathways)
 ```
 
-And the same for `targets`, the data frame for values at and above the target year.
+And the same for `food_targets`, the data frame for values at and above the target year.
 ```{r}
-years_tmp <- seq(2050, 2075, by = 5)
+years_tmp <- seq(netzero_target_year, 2080, by = 5)
 countries_tmp <- food_2014_2022_est %>% distinct(iso_alpha3) %>% pull(iso_alpha3)
 model_groups_tmp <- food_2014_2022_est %>% distinct(model_group) %>% pull(model_group)
 diet_plans_tmp <- c("CNS-CFP", "ELA-PHD",  "FDA-SDP")
@@ -411,67 +453,43 @@ names(targets_tmp) <- c("year", "iso_alpha3", "model_group", "diet_plan", "scena
 ```
 
 ```{r}
-targets <- food_proj %>% 
-  dplyr::filter(year >= 2050, year <= 2075) %>% 
+food_targets <- food_proj %>% 
+  dplyr::filter(year >= netzero_target_year, year <= 2080) %>% 
   dplyr::full_join(targets_tmp, by = c("iso_alpha3", "diet_plan", "year", "model_group", "tonnes_yr", "scenario")) %>% 
-  dplyr::mutate(tonnes_yr = ifelse(is.na(tonnes_yr), 1000, tonnes_yr)) %>% 
+  dplyr::mutate(tonnes_yr = ifelse(is.na(tonnes_yr), 0, tonnes_yr)) %>% 
   dplyr::filter(!is.na(subregionname)) %>% 
   dplyr::select(-subregionname)
   
-
-head(targets)
+head(food_targets)
 ```
 
-
-Confirm that all countries represented in `data_pathways` are represented in `targets`. For the spline interpolation to work, there must be tie points for all countries, diet_plans, and scenarios at 2022 and 2050.
+Confirm that all countries represented in `data_pathways` are represented in `targets`. For the spline interpolation to work, there must be tie points for all countries, diet_plans, and scenarios at 2022 and the `netzero_target_year`.
 ```{r}
-data_countries <- data_pathways %>% dplyr::distinct(iso_alpha3) %>% dplyr::pull(iso_alpha3)
-targ_countries <- targets %>% dplyr::distinct(iso_alpha3) %>% dplyr::pull(iso_alpha3)
+data_countries <- food_data_pathways %>% dplyr::distinct(iso_alpha3) %>% dplyr::pull(iso_alpha3)
+targ_countries <- food_targets %>% dplyr::distinct(iso_alpha3) %>% dplyr::pull(iso_alpha3)
 
 shared_countries <- intersect(data_countries, targ_countries)
 
 food_2014_2022_est_clean <- data_pathways %>% 
   dplyr::filter(iso_alpha3 %in% shared_countries)
-targets_clean <- targets %>% 
+food_targets_clean <- targets %>% 
   dplyr::filter(iso_alpha3 %in% shared_countries)
 
 ```
 
-
+Merge the time series together into a `harmonized_food_data_targets` data frame to run the interpolation on.
 ```{r}
 
-harmonized_data_targets <- food_2014_2022_est_clean %>%
+harmonized_food_data_targets <- food_2014_2022_est_clean %>%
   dplyr::full_join(targets_clean, by = c("year", "model_group", "tonnes_yr", "iso_alpha3", "diet_plan", "scenario")) %>% 
   dplyr::arrange(year)
-# %>% 
-  # dplyr::full_join(data.frame(model_group = c(
-  #     "beef_lamb_pork",
-  #     "cereals",
-  #     "chicken_poultry",
-  #     "dairy",
-  #     "eggs",
-  #     "fish_seafood",
-  #     "fruits",
-  #     "legumes",
-  #     "oils",
-  #     "roots_tubers",
-  #     "sugarcrops",
-  #     "treenuts",
-  #     "vegetables"
-  #   )), by = "model_group")
-
-# %>% 
-#   dplyr::filter(!iso_alpha3 %in% c("ABW", "BDI", "BHR", "BRN", "BTN", "CIV", "COD", "COM", "ERI", "FSM", "GLP", "GNQ", "GUF", "GUM", "LBY", "MTQ", "MYT", "PRI", "PRK", "PSE", "QAT", "REU", "SGP", "SOM", "SYR", "TON", "VIR")) %>% 
-#   dplyr::filter(!iso_alpha3 %in% c("AFG", "AGO", "ALB", "ARE", "ARG", "ARM", "AUS", "AUT", "AZE", "BEL", "BEN", "BFA", "BGD", "BGR", "BHS", "BIH", "BLR", "BLZ", "BOL", "BRA", "BRB", "BWA", "CAF"))
-
-# harmonized_data_targets
 
 ```
 
 Interpolate transformation pathways between the FAO food balance data (and linearly interpolated values to 2022 based on the FAO data) and target year values using a spline with all values as tie-points.
 ```{r}
 
-food_pathways_tmp <- harmonized_data_targets %>%
+food_pathways_tmp <- harmonized_food_data_targets %>%
   group_by(model_group, scenario, diet_plan, iso_alpha3) %>%
   mutate(tonnes_yr_interp = spline(
     x = year,
@@ -486,6 +504,117 @@ food_pathways <- food_pathways_tmp %>%
   dplyr::rename(tonnes_yr = tonnes_yr_interp)
 
 ```
+
+### For feed
+```{r}
+years_tmp <- feed_2014_2022_est %>% distinct(year) %>% pull(year)
+countries_tmp <- feed_2014_2022_est %>% distinct(iso_alpha3) %>% pull(iso_alpha3)
+model_groups_tmp <- feed_2014_2022_est %>% distinct(model_group) %>% pull(model_group)
+diet_plans_tmp <- c("CNS-CFP", "ELA-PHD",  "FDA-SDP")
+scenarios_tmp <- c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")
+
+
+empty_set <- expand.grid(years_tmp, countries_tmp, model_groups_tmp, diet_plans_tmp, scenarios_tmp)
+names(empty_set) <- c("year", "iso_alpha3", "model_group", "diet_plan", "scenario")
+
+```
+
+```{r}
+feed_2014_2022_est_tmp <- feed_2014_2022_est %>%
+  full_join(empty_set, by = c("year", "model_group", "iso_alpha3")) %>%
+  mutate(tonnes_yr = ifelse(is.na(tonnes_yr), 0, tonnes_yr))
+
+```
+
+Do the same for `feed_pathways` data frame representing values between 2023 and the target year to be filled by the spline values.
+```{r}
+years_tmp <- seq(2023, netzero_target_year - 1, by = 1)
+countries_tmp <- feed_2014_2022_est %>% distinct(iso_alpha3) %>% pull(iso_alpha3)
+model_groups_tmp <- feed_2014_2022_est %>% distinct(model_group) %>% pull(model_group)
+diet_plans_tmp <- c("CNS-CFP", "ELA-PHD",  "FDA-SDP")
+scenarios_tmp <- c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")
+tonnes_yr_tmp <- NA
+
+pathways_tmp <- expand.grid(years_tmp, countries_tmp, model_groups_tmp, diet_plans_tmp, scenarios_tmp, tonnes_yr_tmp)
+names(pathways_tmp) <- c("year", "iso_alpha3", "model_group", "diet_plan", "scenario", "tonnes_yr")
+```
+
+Merge the FAO-derived data with the empty pathways data frame.
+```{r}
+feed_data_pathways <- feed_2014_2022_est_tmp %>% 
+  full_join(pathways_tmp, by = c("year", "model_group", "tonnes_yr", "iso_alpha3", "diet_plan", "scenario"))
+
+head(feed_data_pathways)
+```
+
+And the same for `feed_targets`, the data frame for values at and above the target year.
+```{r}
+years_tmp <- seq(netzero_target_year, 2080, by = 5)
+countries_tmp <- feed_2014_2022_est %>% distinct(iso_alpha3) %>% pull(iso_alpha3)
+model_groups_tmp <- feed_2014_2022_est %>% distinct(model_group) %>% pull(model_group)
+diet_plans_tmp <- c("CNS-CFP", "ELA-PHD",  "FDA-SDP")
+scenarios_tmp <- c("SSP1", "SSP2", "SSP3", "SSP4", "SSP5")
+tonnes_yr_tmp <- NA
+
+targets_tmp <- expand.grid(years_tmp, countries_tmp, model_groups_tmp, diet_plans_tmp, scenarios_tmp, tonnes_yr_tmp)
+names(targets_tmp) <- c("year", "iso_alpha3", "model_group", "diet_plan", "scenario", "tonnes_yr")
+```
+
+```{r}
+feed_targets <- feed_proj %>% 
+  dplyr::filter(year >= netzero_target_year, year <= 2080) %>% 
+  dplyr::full_join(targets_tmp, by = c("iso_alpha3", "diet_plan", "year", "model_group", "tonnes_yr", "scenario")) %>% 
+  dplyr::mutate(tonnes_yr = ifelse(is.na(tonnes_yr), 0, tonnes_yr)) %>% 
+  dplyr::filter(!is.na(subregionname)) %>% 
+  dplyr::select(-subregionname)
+  
+head(feed_targets)
+```
+
+
+Confirm that all countries represented in `data_pathways` are represented in `targets`. For the spline interpolation to work, there must be tie points for all countries, diet_plans, and scenarios at 2022 and 2050.
+```{r}
+data_countries <- feed_data_pathways %>% dplyr::distinct(iso_alpha3) %>% dplyr::pull(iso_alpha3)
+targ_countries <- feed_targets %>% dplyr::distinct(iso_alpha3) %>% dplyr::pull(iso_alpha3)
+
+shared_countries <- intersect(data_countries, targ_countries)
+
+feed_2014_2022_est_clean <- data_pathways %>% 
+  dplyr::filter(iso_alpha3 %in% shared_countries)
+feed_targets_clean <- targets %>% 
+  dplyr::filter(iso_alpha3 %in% shared_countries)
+
+```
+
+Merge into harmonized data frame.
+```{r}
+
+harmonized_feed_data_targets <- feed_2014_2022_est_clean %>%
+  dplyr::full_join(feed_targets_clean, by = c("year", "model_group", "tonnes_yr", "iso_alpha3", "diet_plan", "scenario")) %>% 
+  dplyr::arrange(year)
+
+```
+
+Interpolate transformation pathways between the FAO food balance data (and linearly interpolated values to 2022 based on the FAO data) and target year values using a spline with all values as tie-points.
+```{r}
+
+feed_pathways_tmp <- harmonized_feed_data_targets %>%
+  group_by(model_group, scenario, diet_plan, iso_alpha3) %>%
+  mutate(tonnes_yr_interp = spline(
+    x = year,
+    y = tonnes_yr,
+    xout = year,
+    ties = "ordered"
+  )$y,) %>%
+  ungroup()
+
+feed_pathways <- feed_pathways_tmp %>%
+  dplyr::select(-tonnes_yr) %>%
+  dplyr::rename(tonnes_yr = tonnes_yr_interp)
+
+```
+
+## Visualization
 
 To visualise these data, I will aggregate food types into animal products, plant products and fish-seafood.
 ```{r}
@@ -506,7 +635,7 @@ p3 <- ggplot(food_pathways_agg %>%
                 diet_plan == "ELA-PHD"), aes(x = year)) + 
   geom_area(aes(y = 1e-9*tonnes_yr, 
                 fill = food_group)) + 
-  geom_vline(xintercept = 2050, alpha = 0.5, size = 2) + 
+  geom_vline(xintercept = netzero_target_year, alpha = 0.5, size = 2) + 
   theme_minimal() + 
   theme(
     legend.position = "top", 
@@ -521,63 +650,4 @@ p3 <- ggplot(food_pathways_agg %>%
 p3
 ```
 
-
-
-```{r}
-library(magrittr)
-ds <- readr::read_csv("trt,depth,root,carbon\nA,2,1,14\nA,4,2,18\nA,6,3,18\nA,8,3,17\nA,10,1,12\nB,2,3,16\nB,4,4,18\nB,6,4,17\nB,8,2,15\nB,10,1,12")
-
-ds_depths_possible <- expand.grid(
-  depth            = seq(from=min(ds$depth), max(ds$depth), by=.5), #Decide resolution here.
-  trt              = c("A", "B"),
-  stringsAsFactors = FALSE
-  )
-tmp <- ds %>% 
-  dplyr::right_join(ds_depths_possible, by=c("trt", "depth")) 
-tmp
-```
-
-```{r}
-ds_intpolated <- ds %>% 
-  dplyr::right_join(ds_depths_possible, by=c("trt", "depth")) %>% #Incorporate locations to interpolate
-  dplyr::group_by(trt) %>% 
-  dplyr::mutate(
-    root_interpolated     = spline(x=depth, y=root  , xout=depth)$y,
-    carbon_interpolated   = spline(x=depth, y=carbon, xout=depth)$y
-  ) %>% 
-  dplyr::ungroup()
-ds_intpolated
-```
-
-
-Find where projections of modeled diet food values are in 2050.
-```{r}
-food_est <- global_crop_demand_food_feed %>%
-  dplyr::mutate(scenario = ifelse(
-    SCENARIO == "SSP1_v9_130115",
-    "SSP1",
-    ifelse(
-      SCENARIO == "SSP2_v9_130115",
-      "SSP2",
-      ifelse(
-        SCENARIO == "SSP3_v9_130115",
-        "SSP3",
-        ifelse(
-          SCENARIO == "SSP4d_v9_130115",
-          "SSP4",
-          "SSP5"
-        )
-      )
-    )
-  )) %>%
-  dplyr::filter(year == 2050, crop_class == "food")
-```
-
-```{r}
-food_est %>% 
-  dplyr::select(-SCENARIO, tonnes_day, -crop_class)
-# %>% 
-#   dplyr::bind_rows(food_2014_2022_est_tmp)
-
-```
 
