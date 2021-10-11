@@ -72,6 +72,8 @@ foodbalance_map <- readr::read_csv(
     model_group = col_character()
   )
 )
+
+
 ```
 
 Select only those elements that have to do with food and food supply.
