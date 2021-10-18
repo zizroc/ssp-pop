@@ -1447,31 +1447,31 @@ annotation <- data.frame(
 ```
 
 
-```{r}
-# library(directlabels)
-der_change_plot <- ggplot(tmp1, 
-       aes(x = year, 
-           y = der_surplus, 
-           group = region_code)) + 
-  geom_hline(yintercept = 0, alpha = 0.6, size = 0.5) + 
-  geom_polygon(aes(fill = region_code), alpha = 0.4) + 
-  # geom_line(aes(color = region_code), alpha = 0.5) + 
-  theme_minimal() + 
-  # geom_dl(aes(label = region_code, color = region_code), method = list(dl.trans(x = x - 2), "first.points", cex = 0.8)) + 
-  # geom_dl(aes(label = region_code, color = region_code), method = list(dl.trans(x = x + 0), "last.points", cex = 0.8)) + 
-  geom_text(data = annotation, aes(x=year, y=der_surplus, label=region_code, color = region_code, size = 2), show.legend = FALSE) +
-  theme(
-    legend.title = element_blank(), 
-    legend.position = "right", 
-    axis.title.x = element_blank()
-  ) + 
-  labs(title = "Average DER surplus change from 2020 to 2050",
-       subtitle = "Range of surpluses between a healthy DER and FAO DER (2020), by SSP", 
-       y = "kcal/cap/day") 
+<!-- ```{r} -->
+<!-- # library(directlabels) -->
+<!-- der_change_plot <- ggplot(tmp1,  -->
+<!--        aes(x = year,  -->
+<!--            y = der_surplus,  -->
+<!--            group = region_code)) +  -->
+<!--   geom_hline(yintercept = 0, alpha = 0.6, size = 0.5) +  -->
+<!--   geom_polygon(aes(fill = region_code), alpha = 0.4) +  -->
+<!--   # geom_line(aes(color = region_code), alpha = 0.5) +  -->
+<!--   theme_minimal() +  -->
+<!--   # geom_dl(aes(label = region_code, color = region_code), method = list(dl.trans(x = x - 2), "first.points", cex = 0.8)) +  -->
+<!--   # geom_dl(aes(label = region_code, color = region_code), method = list(dl.trans(x = x + 0), "last.points", cex = 0.8)) +  -->
+<!--   geom_text(data = annotation, aes(x=year, y=der_surplus, label=region_code, color = region_code, size = 2), show.legend = FALSE) + -->
+<!--   theme( -->
+<!--     legend.title = element_blank(),  -->
+<!--     legend.position = "right",  -->
+<!--     axis.title.x = element_blank() -->
+<!--   ) +  -->
+<!--   labs(title = "Average DER surplus change from 2020 to 2050", -->
+<!--        subtitle = "Range of surpluses between a healthy DER and FAO DER (2020), by SSP",  -->
+<!--        y = "kcal/cap/day")  -->
 
-der_change_plot
+<!-- der_change_plot -->
 
-```
+<!-- ``` -->
 
 ```{r}
 der_deficits <- der_surpluses_regions %>% 
@@ -3009,7 +3009,7 @@ feed_regime <- feed_regimes_regions %>%
   dplyr::mutate(pasture_silage = 1) %>% 
   dplyr::mutate(across(bovine_dairy:pasture_silage)*0.5)
 
-head(feed_regime)
+# head(feed_regime)
 
 ```
 
@@ -3153,7 +3153,7 @@ labz <- c("food", "feed")
 # ymax <- (max(global_crop_demand_food_feed_diff$diff) + 0.05 * max(global_crop_demand_food_feed_diff$diff)) * 1e-9
 # ymin <- 0
 
-ymax <- 3.1 
+ymax <- 1 
 ymin <- -0.1 
 
 
@@ -3162,14 +3162,16 @@ p5a <- ggplot(
     dplyr::filter(year %in% c(2025, 2050, 2075) &
                     SCENARIO == "SSP1_v9_130115"),
   aes(x = diet_plan_f,
-      y = diff * 1e-9)
-) +
+      y = diff/tonnes_yr_2020)
+) + 
+  geom_hline(yintercept = 0, alpha = 0.8) +
   geom_col(aes(fill = crop_class), alpha = 0.8) + 
   scale_fill_manual(labels = c("feed for animals", "food for humans"), values = c(muted("magenta"), muted("green"))) + 
   #  scale_fill_manual(
   #   values = cols,
   #   labels = labz
   # ) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   coord_cartesian(ylim = c(ymin, ymax)) +
   theme_bw() + 
   theme(
@@ -3187,7 +3189,7 @@ p5a <- ggplot(
     panel.grid.minor.x = element_blank(), 
     axis.title.y = element_text(size = 7)
   ) +
-  labs(title = "SSP1", y = "Gt over 2020 demand") +
+  labs(title = "SSP1", y = "Relative to 2020 demand") +
   facet_wrap( ~ year)
 
 p5_legend_only <- cowplot::get_legend(p5a)
@@ -3200,14 +3202,16 @@ p5b <- ggplot(
     dplyr::filter(year %in% c(2025, 2050, 2075) &
                     SCENARIO == "SSP2_v9_130115"),
    aes(x = diet_plan_f,
-      y = diff * 1e-9)
+      y = diff/tonnes_yr_2020)
 ) +
+  geom_hline(yintercept = 0, alpha = 0.8) +
   geom_col(aes(fill = crop_class), alpha = 0.8) + 
   scale_fill_manual(labels = c("feed for animals", "food for humans"), values = c(muted("magenta"), muted("green"))) + 
   # scale_fill_manual(
   #   values = cols,
   #   labels = labz
   # ) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   coord_cartesian(ylim = c(ymin, ymax)) +
   theme_bw() +
   theme(
@@ -3233,14 +3237,16 @@ p5c <- ggplot(
     dplyr::filter(year %in% c(2025, 2050, 2075) &
                     SCENARIO == "SSP3_v9_130115"),
   aes(x = diet_plan_f,
-      y = diff * 1e-9)
+      y = diff/tonnes_yr_2020)
 ) +
+  geom_hline(yintercept = 0, alpha = 0.8) +
   geom_col(aes(fill = crop_class), alpha = 0.8) + 
   scale_fill_manual(labels = c("feed for animals", "food for humans"), values = c(muted("magenta"), muted("green"))) + 
   # scale_fill_manual(
   #   values = cols,
   #   labels = labz
   # ) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   coord_cartesian(ylim = c(ymin, ymax)) +
   theme_bw() +
   theme(
@@ -3266,14 +3272,16 @@ p5d <- ggplot(
     dplyr::filter(year %in% c(2025, 2050, 2075) &
                     SCENARIO == "SSP4d_v9_130115"),
   aes(x = diet_plan_f,
-      y = diff * 1e-9)
+      y = diff/tonnes_yr_2020)
 ) +
+  geom_hline(yintercept = 0, alpha = 0.8) +
   geom_col(aes(fill = crop_class), alpha = 0.8) + 
   scale_fill_manual(labels = c("feed for animals", "food for humans"), values = c(muted("magenta"), muted("green"))) + 
   # scale_fill_manual(
   #   values = cols,
   #   labels = labz
   # ) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   coord_cartesian(ylim = c(ymin, ymax)) +
   theme_bw() +
   theme(
@@ -3291,7 +3299,7 @@ p5d <- ggplot(
     panel.grid.minor.x = element_blank(), 
     axis.title.y = element_text(size = 7)
   ) +
-  labs(title = "SSP4", y = "Gt over 2020 demand") +
+  labs(title = "SSP4", y = "Relative to 2020 demand") +
   facet_wrap( ~ year)
 
 p5e <- ggplot(
@@ -3299,14 +3307,16 @@ p5e <- ggplot(
     dplyr::filter(year %in% c(2025, 2050, 2075) &
                     SCENARIO == "SSP5_v9_130115"),
   aes(x = diet_plan_f,
-      y = diff * 1e-9)
+      y = diff/tonnes_yr_2020)
 ) +
+  geom_hline(yintercept = 0, alpha = 0.8) +
   geom_col(aes(fill = crop_class), alpha = 0.8) + 
   scale_fill_manual(labels = c("feed for animals", "food for humans"), values = c(muted("magenta"), muted("green"))) + 
   # scale_fill_manual(
   #   values = cols,
   #   labels = labz
   # ) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   coord_cartesian(ylim = c(ymin, ymax)) +
   theme_bw() + 
   theme(
@@ -3333,6 +3343,8 @@ p5e <- ggplot(
 p5 <- cowplot::plot_grid(p5a, p5b, p5c, p5d, p5e, p5_legend_only)
 p5
 ```
+
+
 
 
 ## Estimate the quantity of livestock
@@ -3384,7 +3396,7 @@ To calculate a similar factor for dairy products, the following assumptions were
 
 To map onto the various diets' model_groups, I take averages. I.e., beef_lamb_pork is ave(bovine_meat, caprine_meat, sus_meat), dairy is ave(bovine_dairy, caprine_dairy), and fish_seafood is ave( fish, other_seafood, freshwater_fish); meat_poultry refers to a mixture of poultry and other livestock meats.
 
-Sources: (1) pigs, [Boler, DD. 2014. In Encyclopedia of Meat Sciences (Second Edition), p.363-368]("https://doi.org/10.1016/B978-0-12-384731-7.00079-9"); (2) poultry, [Maurer, AJ. 2003. In Encyclopedia of Food Sciences and Nutrition, p.4686-4689]("https://doi.org/10.1016/B0-12-227055-X/00953-6"); (3) sheep, [Berg, EP, McFadin Walker, EL. 2004. In Encyclopedia of Meat Sciences, p.1291-1295]("https://www.sciencedirect.com/topics/agricultural-and-biological-sciences/dressing-percentage"); (4) cattle, [Price, MA. 2004. In Encyclopedia of Meat Sciences, p.1277-1284]("https://doi.org/10.1016/B0-12-464970-X/00107-0"); (5) camels, Chapter VI in [Yagil, R., 1982. Camels and camel milk. FAO.](http://www.fao.org/3/x6528e/X6528E06.htm#:~:text=The%20brisket%2C%20ribs%20and%20loin,et%20al.%2C%201972).) E.g., "The dressing percentage of the carcass varies between 52 percent and 77 percent"; (6) [Schweihofer, J.P., 2011. Carcass dressing percentage and cooler shrink. Michigan State University Extension.](https://www.canr.msu.edu/news/carcass_dressing_percentage_and_cooler_shrink).
+Sources: (1) pigs, [Boler, DD. 2014. In Encyclopedia of Meat Sciences (Second Edition), p.363-368](https://doi.org/10.1016/B978-0-12-384731-7.00079-9); (2) poultry, [Maurer, AJ. 2003. In Encyclopedia of Food Sciences and Nutrition, p.4686-4689](https://doi.org/10.1016/B0-12-227055-X/00953-6); (3) sheep, [Berg, EP, McFadin Walker, EL. 2004. In Encyclopedia of Meat Sciences, p.1291-1295](https://www.sciencedirect.com/topics/agricultural-and-biological-sciences/dressing-percentage); (4) cattle, [Price, MA. 2004. In Encyclopedia of Meat Sciences, p.1277-1284](https://doi.org/10.1016/B0-12-464970-X/00107-0); (5) camels, Chapter VI in [Yagil, R., 1982. Camels and camel milk. FAO.](http://www.fao.org/3/x6528e/X6528E06.htm#:~:text=The%20brisket%2C%20ribs%20and%20loin,et%20al.%2C%201972).) E.g., "The dressing percentage of the carcass varies between 52 percent and 77 percent"; (6) [Schweihofer, J.P., 2011. Carcass dressing percentage and cooler shrink. Michigan State University Extension.](https://www.canr.msu.edu/news/carcass_dressing_percentage_and_cooler_shrink).
 
 The processed weight to live weight for each of these animals is as follows:
 ```{r}
